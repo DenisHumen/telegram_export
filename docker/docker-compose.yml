@@ -1,0 +1,60 @@
+# TgVault infrastructure: MySQL 8 + Redis 7.
+# Запускается из start.sh:
+#   docker compose --env-file .env -f docker/docker-compose.yml up -d
+# Порты нестандартные (13306 / 16379), чтобы не конфликтовать с локальными сервисами.
+# Ключ `version:` намеренно отсутствует — он устарел в Compose v2.
+
+name: tgvault
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: tgvault-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_allowed_packet=64M
+      - --innodb-buffer-pool-size=512M
+      - --sql-mode=STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION
+      - --skip-name-resolve
+      - --default-time-zone=+00:00
+    environment:
+      MYSQL_DATABASE: "${TGV_MYSQL_DB:-tgvault}"
+      MYSQL_USER: "${TGV_MYSQL_USER:-tgvault}"
+      MYSQL_PASSWORD: "${TGV_MYSQL_PASSWORD:-tgvault}"
+      MYSQL_ROOT_PASSWORD: "${TGV_MYSQL_ROOT_PASSWORD:-tgvault_root}"
+      TZ: "${TZ:-UTC}"
+    ports:
+      - "${TGV_MYSQL_PORT:-13306}:3306"
+    volumes:
+      - tgvault_mysql_data:/var/lib/mysql
+    healthcheck:
+      # $$ экранирует $ для Compose — переменная раскрывается уже внутри контейнера.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: tgvault-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    ports:
+      - "${TGV_REDIS_PORT:-16379}:6379"
+    volumes:
+      - tgvault_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  tgvault_mysql_data:
+    name: tgvault_mysql_data
+  tgvault_redis_data:
+    name: tgvault_redis_data

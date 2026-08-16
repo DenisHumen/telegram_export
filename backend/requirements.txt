@@ -1,0 +1,59 @@
+# TgVault backend dependencies — Python 3.12
+# Все версии проверены на PyPI и разрешаются pip-резолвером без конфликтов.
+# Обновлять только вместе (pip install --dry-run -r requirements.txt).
+
+# --- Web framework / ASGI server ---------------------------------------------
+# FastAPI даёт REST + WebSocket + OpenAPI (/docs); uvicorn[standard] тянет
+# httptools/watchfiles/websockets и даёт быстрый event loop.
+fastapi==0.141.1
+uvicorn[standard]==0.52.3
+
+# --- Конфигурация и валидация ------------------------------------------------
+# pydantic v2 — DTO из §4 контракта; pydantic-settings читает .env (§7).
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-dotenv==1.2.2
+
+# --- База данных (MySQL 8, async) --------------------------------------------
+# SQLAlchemy 2.0 в async-режиме поверх aiomysql; PyMySQL нужен aiomysql как
+# протокольный слой и используется для синхронных задач (bootstrap/миграции).
+SQLAlchemy[asyncio]==2.0.52
+aiomysql==0.3.2
+PyMySQL==1.1.3
+
+# --- Шифрование --------------------------------------------------------------
+# Fernet из cryptography шифрует StringSession Telegram в колонке accounts.session_enc.
+cryptography==46.0.7
+
+# --- Кэш / шина событий ------------------------------------------------------
+# redis-py (asyncio) для pub/sub прогресса задач; при недоступности — in-memory fallback.
+redis==6.4.0
+
+# --- Telegram (MTProto) ------------------------------------------------------
+# Telethon — user-account клиент: авторизация по коду/QR/2FA, iter_messages, download_media.
+Telethon==1.44.0
+
+# --- HTTP / файлы / загрузки -------------------------------------------------
+# httpx — исходящие HTTP-запросы и тесты ASGI; aiofiles — неблокирующая запись
+# скачанных медиа; python-multipart нужен FastAPI для multipart/form-data.
+httpx==0.28.1
+aiofiles==25.1.0
+python-multipart==0.0.32
+
+# --- Рендеринг результатов экспорта ------------------------------------------
+# Jinja2 собирает офлайновый index.html просмотрщика (§6);
+# orjson — быстрая сериализация больших messages.json / raw JSON колонок.
+Jinja2==3.1.6
+orjson==3.12.0
+
+# --- WebSocket ---------------------------------------------------------------
+# Явный пин, чтобы ws-слой uvicorn был воспроизводим (см. §5 контракта).
+websockets==15.0.1
+
+# --- Медиа -------------------------------------------------------------------
+# Pillow — превью/тумбнейлы и определение размеров изображений.
+Pillow==12.3.0
+
+# --- Логи / консоль ----------------------------------------------------------
+# rich — читаемый цветной вывод логов бэкенда в data/logs/app.log и в консоль.
+rich==15.0.0

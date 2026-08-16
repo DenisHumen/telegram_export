@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  * {
+    border-color: theme('colors.line');
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-base text-ink font-sans antialiased;
+    background-image:
+      radial-gradient(900px 520px at 12% -8%, rgba(51, 144, 236, 0.10), transparent 60%),
+      radial-gradient(760px 460px at 96% 0%, rgba(92, 200, 255, 0.06), transparent 62%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: rgba(51, 144, 236, 0.35);
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-base rounded-md;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.09);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.18);
+    background-clip: content-box;
+  }
+
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 120px);
+  }
+
+  .card-hover {
+    @apply transition-all duration-150 hover:-translate-y-0.5 hover:border-line2 hover:shadow-lift;
+  }
+
+  .panel-inset {
+    @apply rounded-xl border border-line bg-base/60;
+  }
+
+  .label {
+    @apply block text-[12px] font-medium uppercase tracking-wide text-ink-faint mb-1.5;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-line bg-base/70 px-3.5 py-2.5 text-sm text-ink
+           placeholder:text-ink-faint transition-colors duration-150
+           hover:border-line2 focus:border-accent/60 focus:bg-base focus:outline-none
+           focus:ring-2 focus:ring-accent/25 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .skeleton {
+    @apply rounded-lg bg-surface2;
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.07) 220px,
+      rgba(255, 255, 255, 0.02) 440px
+    );
+    background-size: 900px 100%;
+    @apply animate-shimmer;
+  }
+
+  .scroll-thin {
+    scrollbar-width: thin;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
