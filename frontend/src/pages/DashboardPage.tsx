@@ -1,18 +1,23 @@
 import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Activity, Database, Download, HardDrive, Image, MessagesSquare, Plus, Users } from 'lucide-react';
+import { ArrowRight, Database, Download, HardDrive, Image, MessagesSquare, Plus, Users } from 'lucide-react';
 import * as api from '../api/client';
 import { qk, useAccounts, useJobs, useLogs } from '../hooks/queries';
 import type { AccountStats } from '../api/types';
+import { cn } from '../lib/cn';
 import { formatBytes, formatNumber, formatRelative, formatTime } from '../lib/format';
-import { LOG_LEVEL_CLASS } from '../lib/labels';
+import { isJobActive } from '../lib/jobs';
+import { LOG_LEVEL_BORDER, LOG_LEVEL_CLASS } from '../lib/labels';
+import { PageHeader } from '../components/layout/PageHeader';
 import { Button } from '../components/ui/Button';
-import { Card, CardHeader, SectionTitle } from '../components/ui/Card';
-import { EmptyState, ErrorState, NoAccountsArt } from '../components/ui/EmptyState';
+import { Section, SectionHeading } from '../components/ui/Card';
+import { EmptyState, ErrorState, NoAccountsArt, NoJobsArt } from '../components/ui/EmptyState';
 import { JobCard } from '../components/jobs/JobCard';
 import { Skeleton, SkeletonRows } from '../components/ui/Skeleton';
 import { StatTile } from '../components/ui/StatTile';
+
+const ICON = 'h-3.5 w-3.5';
 
 export function DashboardPage() {
   const {
@@ -22,8 +27,8 @@ export function DashboardPage() {
     error: accountsErrorValue,
     refetch: refetchAccounts,
   } = useAccounts();
-  const { data: jobs, isLoading: jobsLoading } = useJobs({ page: 1, page_size: 6 });
-  const { data: logs, isLoading: logsLoading } = useLogs({ limit: 14 }, 5000);
+  const { data: jobs, isLoading: jobsLoading } = useJobs({ page: 1, page_size: 8 });
+  const { data: logs, isLoading: logsLoading } = useLogs({ limit: 12 }, 5000);
 
   const statsQueries = useQueries({
     queries: (accounts ?? []).map((account) => ({
@@ -48,12 +53,13 @@ export function DashboardPage() {
 
   const statsLoading = accountsLoading || statsQueries.some((query) => query.isLoading);
   const jobItems = jobs?.items ?? [];
-  const runningCount = jobItems.filter((job) => job.status === 'running' || job.status === 'queued').length;
+  const runningJobs = jobItems.filter(isJobActive);
+  const recentJobs = jobItems.filter((job) => !isJobActive(job)).slice(0, 3);
 
   if (accountsError) {
     return (
       <>
-        <SectionTitle title="Дашборд" subtitle="Обзор архива и активных экспортов" />
+        <PageHeader title="Дашборд" subtitle="Обзор архива и активных экспортов" />
         <ErrorState
           title="Backend недоступен"
           description={api.errorMessage(accountsErrorValue)}
@@ -66,175 +72,177 @@ export function DashboardPage() {
   if (!accountsLoading && (accounts?.length ?? 0) === 0) {
     return (
       <>
-        <SectionTitle title="Дашборд" subtitle="Обзор архива и активных экспортов" />
-        <Card>
-          <EmptyState
-            art={<NoAccountsArt />}
-            title="Аккаунтов пока нет"
-            description="Добавьте Telegram-аккаунт, чтобы синхронизировать чаты и начать выгружать архив: сообщения, фото, видео, кружочки и голосовые."
-            action={
-              <Link to="/accounts/new">
-                <Button variant="primary" size="lg" icon={<Plus className="h-4 w-4" />}>
-                  Добавить аккаунт
-                </Button>
-              </Link>
-            }
-          />
-        </Card>
+        <PageHeader title="Дашборд" subtitle="Обзор архива и активных экспортов" />
+        <EmptyState
+          art={<NoAccountsArt />}
+          title="Аккаунтов пока нет"
+          description="Добавьте Telegram-аккаунт, чтобы синхронизировать чаты и начать выгружать архив: сообщения, фото, видео, кружочки и голосовые."
+          action={
+            <Link to="/accounts/new">
+              <Button variant="primary" icon={<Plus className={ICON} />}>
+                Добавить аккаунт
+              </Button>
+            </Link>
+          }
+        />
       </>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <SectionTitle
-        title="Дашборд"
-        subtitle="Обзор архива и активных экспортов"
-        action={
-          <div className="flex gap-2.5">
-            <Link to="/accounts/new">
-              <Button variant="secondary" icon={<Plus className="h-4 w-4" />}>
-                Аккаунт
-              </Button>
-            </Link>
-            <Link to="/jobs">
-              <Button variant="primary" icon={<Download className="h-4 w-4" />}>
-                Экспорты{runningCount > 0 ? ` (${runningCount})` : ''}
-              </Button>
-            </Link>
-          </div>
-        }
-      />
+    <div className="space-y-8">
+      <PageHeader title="Дашборд" subtitle="Обзор архива и активных экспортов">
+        <Link to="/accounts/new">
+          <Button variant="secondary" size="sm" icon={<Plus className={ICON} />}>
+            Аккаунт
+          </Button>
+        </Link>
+        <Link to="/jobs">
+          <Button variant="primary" size="sm" icon={<Download className={ICON} />}>
+            Экспорты{runningJobs.length > 0 ? ` · ${runningJobs.length}` : ''}
+          </Button>
+        </Link>
+      </PageHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {/* --------------------------------------------------------- hero row */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatTile
-          icon={<Users className="h-4 w-4" />}
+          icon={<Users className={ICON} />}
           label="Аккаунты"
           value={formatNumber(accounts?.length ?? 0)}
           hint={`${formatNumber((accounts ?? []).filter((a) => a.status === 'authorized').length)} авторизовано`}
           loading={accountsLoading}
         />
         <StatTile
-          icon={<MessagesSquare className="h-4 w-4" />}
+          icon={<MessagesSquare className={ICON} />}
           label="Чаты"
           value={formatNumber(totals.chats)}
           loading={statsLoading}
-          tone="accent"
         />
         <StatTile
-          icon={<Database className="h-4 w-4" />}
-          label="Сообщений в кэше"
+          icon={<Database className={ICON} />}
+          label="Сообщений"
           value={formatNumber(totals.messages)}
           loading={statsLoading}
-          tone="success"
         />
         <StatTile
-          icon={<Image className="h-4 w-4" />}
-          label="Медиафайлы"
+          icon={<Image className={ICON} />}
+          label="Медиафайлов"
           value={formatNumber(totals.media_files)}
           loading={statsLoading}
-          tone="warning"
         />
         <StatTile
-          icon={<HardDrive className="h-4 w-4" />}
+          icon={<HardDrive className={ICON} />}
           label="Заархивировано"
           value={formatBytes(totals.bytes)}
           hint={`${formatNumber(totals.jobs)} задач экспорта`}
           loading={statsLoading}
-          tone="neutral"
+          accent
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <section className="space-y-4">
-          <div className="flex items-end justify-between gap-3">
-            <h2 className="text-[15px] font-semibold tracking-tight text-ink">Экспорты</h2>
-            <Link to="/jobs" className="text-[12.5px] text-accent-soft transition-colors hover:text-accent">
-              Все задачи →
-            </Link>
+      {/* ---------------------------------------------------- running jobs */}
+      <Section
+        title={runningJobs.length > 0 ? 'Идут сейчас' : 'Экспорты'}
+        action={
+          <Link
+            to="/jobs"
+            className="inline-flex items-center gap-1 text-[12.5px] text-dim transition-colors duration-120 hover:text-text"
+          >
+            Все задачи <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        }
+      >
+        {jobsLoading ? (
+          <SkeletonRows rows={2} />
+        ) : jobItems.length === 0 ? (
+          <EmptyState
+            art={<NoJobsArt />}
+            title="Экспортов ещё не было"
+            description="Откройте любой чат и нажмите «Экспорт», чтобы настроить и запустить выгрузку."
+          />
+        ) : runningJobs.length > 0 ? (
+          <div className="space-y-4">
+            {runningJobs.map((job) => (
+              <JobCard key={job.id} job={job} compact />
+            ))}
           </div>
-          {jobsLoading ? (
-            <SkeletonRows rows={3} />
-          ) : jobItems.length === 0 ? (
-            <Card>
-              <EmptyState
-                title="Экспортов ещё не было"
-                description="Откройте любой чат и нажмите «Экспорт», чтобы настроить и запустить выгрузку."
-              />
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {jobItems.map((job) => (
-                <JobCard key={job.id} job={job} compact />
-              ))}
-            </div>
-          )}
+        ) : (
+          <div className="space-y-4">
+            {recentJobs.map((job) => (
+              <JobCard key={job.id} job={job} compact />
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/* ------------------------------------------------- accounts + logs */}
+      <div className="grid gap-8 border-t border-border pt-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <section>
+          <SectionHeading
+            title="Аккаунты"
+            action={
+              <Link
+                to="/accounts"
+                className="text-[12.5px] text-dim transition-colors duration-120 hover:text-text"
+              >
+                Все
+              </Link>
+            }
+          />
+          <div className="mt-3 divide-y divide-border rounded-card border border-border">
+            {(accounts ?? []).slice(0, 5).map((account) => (
+              <Link
+                key={account.id}
+                to={`/accounts/${account.id}/chats`}
+                className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-120 first:rounded-t-card last:rounded-b-card hover:bg-veil"
+              >
+                <span
+                  className={cn('h-1.5 w-1.5 shrink-0 rounded-pill', account.connected ? 'bg-success' : 'bg-muted')}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] text-text">{account.label}</span>
+                  <span className="block truncate text-[11.5px] text-muted">
+                    {account.username ? `@${account.username}` : (account.phone ?? '—')} ·{' '}
+                    {formatNumber(account.chats_count)} чатов
+                  </span>
+                </span>
+                <span className="shrink-0 text-[11.5px] text-muted">{formatRelative(account.last_seen_at)}</span>
+              </Link>
+            ))}
+          </div>
         </section>
 
-        <section className="space-y-4">
-          <div className="flex items-end justify-between gap-3">
-            <h2 className="text-[15px] font-semibold tracking-tight text-ink">Последние аккаунты</h2>
-            <Link to="/accounts" className="text-[12.5px] text-accent-soft transition-colors hover:text-accent">
-              Все →
-            </Link>
+        <section>
+          <SectionHeading
+            title="Последние события"
+            action={
+              <Link to="/logs" className="text-[12.5px] text-dim transition-colors duration-120 hover:text-text">
+                Журнал
+              </Link>
+            }
+          />
+          <div className="scroll-thin mt-3 max-h-[300px] overflow-y-auto rounded-card border border-border px-3 py-2.5">
+            {logsLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <Skeleton key={index} className="h-3" />
+                ))}
+              </div>
+            ) : (logs?.length ?? 0) === 0 ? (
+              <p className="py-4 text-center text-[12.5px] text-muted">Логи пока пусты</p>
+            ) : (
+              <ol className="space-y-0.5 font-mono text-[11.5px] leading-relaxed">
+                {logs?.slice(0, 12).map((row) => (
+                  <li key={row.id} className={cn('flex gap-2.5 border-l-2 py-0.5 pl-2.5', LOG_LEVEL_BORDER[row.level])}>
+                    <span className="tnum shrink-0 text-muted">{formatTime(row.ts)}</span>
+                    <span className={cn('w-12 shrink-0 uppercase', LOG_LEVEL_CLASS[row.level])}>{row.level}</span>
+                    <span className="min-w-0 break-words text-dim">{row.message}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
-          <Card>
-            <div className="divide-y divide-line">
-              {(accounts ?? []).slice(0, 4).map((account) => (
-                <Link
-                  key={account.id}
-                  to={`/accounts/${account.id}/chats`}
-                  className="flex items-center gap-3 px-4 py-3 transition-colors duration-150 hover:bg-white/[0.03]"
-                >
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${account.connected ? 'bg-success' : 'bg-ink-faint'}`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] text-ink">{account.label}</span>
-                    <span className="block truncate text-[11.5px] text-ink-faint">
-                      {account.username ? `@${account.username}` : (account.phone ?? '—')} ·{' '}
-                      {formatNumber(account.chats_count)} чатов
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-[11.5px] text-ink-faint">{formatRelative(account.last_seen_at)}</span>
-                </Link>
-              ))}
-            </div>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Журнал"
-              subtitle="Последние события системы"
-              icon={<Activity className="h-4 w-4" />}
-              action={
-                <Link to="/logs" className="text-[12.5px] text-accent-soft transition-colors hover:text-accent">
-                  Открыть
-                </Link>
-              }
-            />
-            <div className="max-h-[320px] overflow-y-auto scroll-thin p-3">
-              {logsLoading ? (
-                <div className="space-y-2 p-1">
-                  {Array.from({ length: 6 }).map((_, index) => (
-                    <Skeleton key={index} className="h-3.5" />
-                  ))}
-                </div>
-              ) : (logs?.length ?? 0) === 0 ? (
-                <p className="px-2 py-4 text-center text-[12.5px] text-ink-faint">Логи пока пусты</p>
-              ) : (
-                <ol className="space-y-1 font-mono text-[11.5px] leading-relaxed">
-                  {logs?.slice(0, 14).map((row) => (
-                    <li key={row.id} className="flex gap-2.5 rounded px-1.5 py-0.5 hover:bg-white/[0.03]">
-                      <span className="shrink-0 text-ink-faint/70">{formatTime(row.ts)}</span>
-                      <span className={`w-14 shrink-0 uppercase ${LOG_LEVEL_CLASS[row.level]}`}>{row.level}</span>
-                      <span className="min-w-0 break-words text-ink-muted">{row.message}</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
-          </Card>
         </section>
       </div>
     </div>

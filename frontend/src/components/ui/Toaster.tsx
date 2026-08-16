@@ -9,10 +9,10 @@ const ICONS: Record<ToastKind, typeof Info> = {
   info: Info,
 };
 
-const ACCENTS: Record<ToastKind, string> = {
-  success: 'text-success border-success/25 bg-success/[0.07]',
-  error: 'text-danger border-danger/25 bg-danger/[0.07]',
-  info: 'text-accent-soft border-accent/25 bg-accent/[0.07]',
+const ICON_TONE: Record<ToastKind, string> = {
+  success: 'text-success',
+  error: 'text-danger',
+  info: 'text-accent',
 };
 
 export function Toaster() {
@@ -21,7 +21,7 @@ export function Toaster() {
 
   return createPortal(
     <div
-      className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2.5"
+      className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2"
       role="status"
       aria-live="polite"
     >
@@ -30,24 +30,20 @@ export function Toaster() {
         return (
           <div
             key={item.id}
-            className={cn(
-              'pointer-events-auto flex items-start gap-3 rounded-2xl border bg-surface/95 p-3.5 shadow-lift backdrop-blur-xl',
-              'animate-slide-in-right',
-              ACCENTS[item.kind],
-            )}
+            className="elevated pointer-events-auto flex animate-slide-in-right items-start gap-3 p-3.5"
           >
-            <Icon className="mt-0.5 h-[18px] w-[18px] shrink-0" aria-hidden />
+            <Icon className={cn('mt-0.5 h-[17px] w-[17px] shrink-0', ICON_TONE[item.kind])} aria-hidden />
             <div className="min-w-0 flex-1">
-              <p className="text-[13.5px] font-medium text-ink">{item.title}</p>
+              <p className="text-[13px] font-medium text-text">{item.title}</p>
               {item.description ? (
-                <p className="mt-0.5 break-words text-[12.5px] leading-snug text-ink-muted">{item.description}</p>
+                <p className="mt-0.5 break-words text-[12.5px] leading-snug text-dim">{item.description}</p>
               ) : null}
             </div>
             <button
               type="button"
               aria-label="Закрыть уведомление"
               onClick={() => dismiss(item.id)}
-              className="rounded-md p-1 text-ink-faint transition-colors hover:bg-white/5 hover:text-ink"
+              className="rounded-[8px] p-1 text-muted transition-colors duration-120 hover:bg-veil hover:text-text"
             >
               <X className="h-3.5 w-3.5" />
             </button>

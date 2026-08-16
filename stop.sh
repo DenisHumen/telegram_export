@@ -45,6 +45,7 @@ trap 'on_error $? $LINENO' ERR
 
 OPT_KEEP_DB=0
 OPT_PURGE=0
+OPT_SUDO_DOCKER=0
 
 usage() {
   cat <<'EOF'
@@ -52,18 +53,20 @@ TgVault — остановка.
 
 Использование: ./stop.sh [флаги]
 
-  --keep-db     не трогать docker-контейнеры (MySQL/Redis продолжат работать)
-  --purge       остановить всё И удалить docker-тома (ВСЕ ДАННЫЕ БД!),
-                требует подтверждения словом "yes"
-  -h, --help    эта справка
+  --keep-db      не трогать docker-контейнеры (MySQL/Redis продолжат работать)
+  --purge        остановить всё И удалить docker-тома (ВСЕ ДАННЫЕ БД!),
+                 требует подтверждения словом "yes"
+  --sudo-docker  вызывать docker через sudo (пользователь не в группе docker)
+  -h, --help     эта справка
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --keep-db)  OPT_KEEP_DB=1 ;;
-    --purge)    OPT_PURGE=1 ;;
-    -h|--help)  usage; exit 0 ;;
+    --keep-db)     OPT_KEEP_DB=1 ;;
+    --purge)       OPT_PURGE=1 ;;
+    --sudo-docker) OPT_SUDO_DOCKER=1 ;;
+    -h|--help)     usage; exit 0 ;;
     *)          usage >&2; erro "Неизвестный флаг: $1"; exit 1 ;;
   esac
   shift
@@ -178,11 +181,27 @@ stop_service "backend (uvicorn)" "$RUN_DIR/backend.pid" 'python|Python|uvicorn' 
 section "Docker (MySQL / Redis)"
 
 DC=""
-if have docker && docker info >/dev/null 2>&1; then
-  if docker compose version >/dev/null 2>&1; then
-    DC="docker compose"
+DOCKER_BIN="docker"
+# Тот же случай, что и в start.sh: демон может работать, но быть недоступным
+# пользователю вне группы docker. Тогда пробуем sudo, но только если он
+# настроен без пароля — интерактивно спрашивать пароль на остановке не нужно.
+if have docker; then
+  if ! docker info >/dev/null 2>&1; then
+    if [ "$OPT_SUDO_DOCKER" -eq 1 ] && have sudo; then
+      DOCKER_BIN="sudo docker"
+    elif have sudo && sudo -n docker info >/dev/null 2>&1; then
+      DOCKER_BIN="sudo docker"
+    else
+      DOCKER_BIN=""
+    fi
+  fi
+fi
+if [ -n "$DOCKER_BIN" ] && $DOCKER_BIN info >/dev/null 2>&1; then
+  if $DOCKER_BIN compose version >/dev/null 2>&1; then
+    DC="$DOCKER_BIN compose"
   elif have docker-compose && docker-compose version >/dev/null 2>&1; then
     DC="docker-compose"
+    [ "$DOCKER_BIN" = "sudo docker" ] && DC="sudo docker-compose"
   fi
 fi
 
@@ -201,7 +220,7 @@ elif [ -z "$DC" ]; then
 elif [ ! -f "$COMPOSE_FILE" ]; then
   skip "$COMPOSE_FILE не найден"
 else
-  RUNNING="$(MSYS_NO_PATHCONV=1 docker ps -q --filter 'name=tgvault-' 2>/dev/null | tr -d '\r' || true)"
+  RUNNING="$(MSYS_NO_PATHCONV=1 $DOCKER_BIN ps -q --filter 'name=tgvault-' 2>/dev/null | tr -d '\r' || true)"
   if [ "$OPT_PURGE" -eq 1 ]; then
     if [ ! -t 0 ]; then
       erro "--purge удаляет тома с данными и требует интерактивного подтверждения."

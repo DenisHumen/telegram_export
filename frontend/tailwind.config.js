@@ -1,86 +1,86 @@
 /** @type {import('tailwindcss').Config} */
+
+/* Semantic colours only — every value resolves to a CSS variable declared in
+   src/index.css, so both themes work without duplicating class names.
+   `<alpha-value>` keeps opacity modifiers (bg-accent/12) working. */
+const channel = (name) => `rgb(var(${name}) / <alpha-value>)`;
+
 export default {
-  darkMode: 'class',
+  darkMode: ['class', '[data-theme="dark"]'],
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        base: '#0B0F14',
-        surface: '#111823',
-        surface2: '#151E2B',
-        surface3: '#1B2634',
-        line: 'rgba(255,255,255,0.06)',
-        line2: 'rgba(255,255,255,0.12)',
+        bg: channel('--c-bg'),
+        surface: channel('--c-surface'),
+        'surface-2': channel('--c-surface-2'),
+        border: 'var(--border)',
+        'border-strong': 'var(--border-strong)',
+        text: channel('--c-text'),
+        dim: channel('--c-text-dim'),
+        muted: channel('--c-text-muted'),
         accent: {
-          DEFAULT: '#3390EC',
-          soft: '#5CC8FF',
-          deep: '#1F6FBF',
+          DEFAULT: channel('--c-accent'),
+          hover: channel('--c-accent-hover'),
+          soft: 'var(--accent-soft)',
         },
-        success: '#3DD68C',
-        warning: '#F5A524',
-        danger: '#F2555A',
-        ink: {
-          DEFAULT: '#E8EEF6',
-          muted: '#8FA0B5',
-          faint: '#5E6E82',
-        },
+        success: channel('--c-success'),
+        warning: channel('--c-warning'),
+        danger: channel('--c-danger'),
+        veil: 'var(--hover-veil)',
+        scrim: 'var(--scrim)',
+      },
+      borderColor: {
+        DEFAULT: 'var(--border)',
       },
       fontFamily: {
-        sans: ['ui-sans-serif', 'Inter', 'system-ui', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
-        mono: ['ui-monospace', 'JetBrains Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'monospace'],
+        sans: ['ui-sans-serif', '-apple-system', 'Segoe UI', 'Roboto', 'Inter', 'Helvetica Neue', 'sans-serif'],
+        mono: ['ui-monospace', 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Menlo', 'monospace'],
       },
       borderRadius: {
-        '2xl': '1rem',
-        '3xl': '1.5rem',
+        control: '10px',
+        card: '14px',
+        pill: '999px',
       },
-      boxShadow: {
-        card: '0 1px 0 0 rgba(255,255,255,0.03) inset, 0 8px 24px -12px rgba(0,0,0,0.8)',
-        lift: '0 18px 40px -18px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.06)',
-        glow: '0 0 0 1px rgba(51,144,236,0.4), 0 8px 30px -10px rgba(51,144,236,0.55)',
+      spacing: {
+        sidebar: '240px',
+        rail: '60px',
+        topbar: '56px',
       },
-      backgroundImage: {
-        'accent-grad': 'linear-gradient(100deg, #3390EC 0%, #5CC8FF 100%)',
-        'panel-grad': 'linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0) 100%)',
+      maxWidth: {
+        content: '1280px',
       },
       keyframes: {
-        sheen: {
-          '0%': { transform: 'translateX(-100%)' },
-          '100%': { transform: 'translateX(300%)' },
-        },
-        shimmer: {
-          '0%': { backgroundPosition: '-500px 0' },
-          '100%': { backgroundPosition: '500px 0' },
-        },
         'fade-in': {
-          from: { opacity: '0', transform: 'translateY(6px)' },
+          from: { opacity: '0', transform: 'translateY(4px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
         'scale-in': {
-          from: { opacity: '0', transform: 'translateY(12px) scale(0.98)' },
-          to: { opacity: '1', transform: 'translateY(0) scale(1)' },
+          from: { opacity: '0', transform: 'scale(0.97)' },
+          to: { opacity: '1', transform: 'scale(1)' },
         },
         'slide-in-right': {
-          from: { opacity: '0', transform: 'translateX(24px)' },
+          from: { opacity: '0', transform: 'translateX(16px)' },
           to: { opacity: '1', transform: 'translateX(0)' },
         },
-        pulseDot: {
+        'row-in': {
+          from: { opacity: '0', transform: 'translateY(-4px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'soft-pulse': {
           '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.35' },
+          '50%': { opacity: '0.4' },
         },
       },
       animation: {
-        sheen: 'sheen 1.8s ease-in-out infinite',
-        shimmer: 'shimmer 1.4s linear infinite',
-        'fade-in': 'fade-in 180ms ease-out both',
-        'scale-in': 'scale-in 160ms cubic-bezier(0.16,1,0.3,1) both',
-        'slide-in-right': 'slide-in-right 220ms cubic-bezier(0.16,1,0.3,1) both',
-        'pulse-dot': 'pulseDot 1.6s ease-in-out infinite',
+        'fade-in': 'fade-in 150ms ease-out both',
+        'scale-in': 'scale-in 150ms cubic-bezier(0.16,1,0.3,1) both',
+        'slide-in-right': 'slide-in-right 180ms cubic-bezier(0.16,1,0.3,1) both',
+        'row-in': 'row-in 180ms ease-out both',
+        'soft-pulse': 'soft-pulse 1.8s ease-in-out infinite',
       },
       transitionDuration: {
-        150: '150ms',
-      },
-      maxWidth: {
-        content: '1400px',
+        120: '120ms',
       },
     },
   },

@@ -14,7 +14,6 @@ export interface ModalProps {
   subtitle?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  /** 'md' regular dialog, 'xl' wide configurator drawer. */
   size?: 'sm' | 'md' | 'lg' | 'xl';
   labelledBy?: string;
 }
@@ -23,7 +22,7 @@ const SIZES: Record<NonNullable<ModalProps['size']>, string> = {
   sm: 'max-w-md',
   md: 'max-w-xl',
   lg: 'max-w-3xl',
-  xl: 'max-w-[1080px]',
+  xl: 'max-w-[1040px]',
 };
 
 export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md' }: ModalProps) {
@@ -77,35 +76,28 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-6">
-      <div
-        className="fixed inset-0 bg-black/65 backdrop-blur-sm animate-fade-in"
-        onClick={onClose}
-        aria-hidden
-      />
+      <div className="fixed inset-0 animate-fade-in bg-scrim backdrop-blur-[3px]" onClick={onClose} aria-hidden />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className={cn(
-          'relative z-10 my-auto w-full rounded-2xl border border-line2 bg-surface/95 shadow-lift backdrop-blur-xl animate-scale-in',
-          SIZES[size],
-        )}
+        className={cn('elevated relative z-10 my-auto w-full animate-scale-in', SIZES[size])}
       >
         {title ? (
-          <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+          <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div className="min-w-0">
-              <h2 className="text-[16px] font-semibold tracking-tight text-ink">{title}</h2>
-              {subtitle ? <p className="mt-0.5 text-[13px] text-ink-muted">{subtitle}</p> : null}
+              <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-text">{title}</h2>
+              {subtitle ? <p className="mt-0.5 truncate text-[13px] text-dim">{subtitle}</p> : null}
             </div>
             <IconButton label="Закрыть" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
             </IconButton>
           </div>
         ) : null}
-        <div className="max-h-[calc(100vh-13rem)] overflow-y-auto scroll-thin px-5 py-5">{children}</div>
+        <div className="scroll-thin max-h-[calc(100vh-13rem)] overflow-y-auto px-5 py-5">{children}</div>
         {footer ? (
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line bg-base/40 px-5 py-4 rounded-b-2xl">
+          <div className="flex flex-wrap items-center justify-end gap-3 rounded-b-card border-t border-border bg-surface-2/40 px-5 py-3.5">
             {footer}
           </div>
         ) : null}

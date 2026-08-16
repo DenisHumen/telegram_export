@@ -471,6 +471,10 @@ POST /api/export/jobs/{id}/pause    -> ExportJob
 POST /api/export/jobs/{id}/resume   -> ExportJob
 DELETE /api/export/jobs/{id}        -> { ok:true }
 GET  /api/export/jobs/{id}/events?after_id=&limit= -> JobEvent[]
+GET  /api/export/jobs/{id}/files
+     ?status=all|pending|downloading|done|failed|skipped
+     &kind=all|photo|video|video_note|voice|audio|document|sticker|animation|thumb|avatar
+     &search=&page=&page_size=   -> Paginated<MediaFileRow>
 POST /api/export/jobs/{id}/rebuild  { formats?, layout?, sort_field?, sort_order? }
      -> ExportJob & { written: string[] }
      // пересобрать выходные файлы ИЗ БД без повторного скачивания
@@ -489,9 +493,26 @@ interface ExportJob {
   total_files: number; downloaded_files: number;
   failed_files: number; skipped_files: number;
   bytes_total: number; bytes_downloaded: number;
-  speed_bps: number; eta_seconds: number | null;
+  speed_bps: number;        // текущая скорость (скользящее окно ~10 с)
+  avg_speed_bps: number;    // средняя за весь прогон
+  eta_seconds: number | null;
+  active_files: ActiveFile[];   // что качается прямо сейчас (может быть пусто)
   error: string | null;
   created_at: string; started_at: string | null; finished_at: string | null;
+}
+
+interface ActiveFile {
+  media_id: number; file_name: string; kind: string;
+  received: number; total: number | null; speed_bps: number;
+}
+
+interface MediaFileRow {
+  id: number; message_id: number; tg_message_id: number;
+  kind: string; file_name: string | null; ext: string | null;
+  mime_type: string | null; size: number | null;
+  width: number | null; height: number | null; duration: number | null;
+  rel_path: string | null; status: string; error: string | null;
+  attempts: number; downloaded_at: string | null;
 }
 
 interface JobEvent { id:number; job_id:number; ts:string; level:'debug'|'info'|'warning'|'error'; message:string; data:any|null; }
@@ -551,6 +572,12 @@ interface ExportOptions {
   incremental: boolean;             // догрузить только новое с прошлого экспорта, default true
   download_thumbs: boolean;         // default false
   download_avatars: boolean;        // аватары отправителей, default false
+
+  // Полнота архива: файлы не должны теряться из-за сетевых сбоев
+  retry_forever: boolean;           // повторять, пока не скачается, default true
+  max_attempts: number;             // предохранитель, 1..10000, default 200
+  resume_partial: boolean;          // докачивать с места обрыва, default true
+  final_sweep: boolean;             // финальный проход по недокачанному, default true
 
   // КАК раскладывать
   layout: LayoutStrategy;           // default 'by_type_date'

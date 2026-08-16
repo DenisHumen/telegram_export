@@ -129,3 +129,30 @@ export const useUiStore = create<UiStore>((set, get) => ({
   searchOpen: false,
   setSearchOpen: (open) => set({ searchOpen: open }),
 }));
+
+/* ----------------------------------------------------------- page header */
+
+interface PageStore {
+  /** Page title + one-line subtitle, rendered by the top bar. */
+  title: string;
+  subtitle: string;
+  setMeta: (title: string, subtitle: string) => void;
+  /** Portal target for the primary page action, owned by the top bar. */
+  actionsSlot: HTMLElement | null;
+  setActionsSlot: (element: HTMLElement | null) => void;
+}
+
+export const usePageStore = create<PageStore>((set, get) => ({
+  title: 'TgVault',
+  subtitle: '',
+  setMeta: (title, subtitle) => {
+    const state = get();
+    if (state.title === title && state.subtitle === subtitle) return;
+    set({ title, subtitle });
+  },
+  actionsSlot: null,
+  setActionsSlot: (element) => {
+    if (get().actionsSlot === element) return;
+    set({ actionsSlot: element });
+  },
+}));

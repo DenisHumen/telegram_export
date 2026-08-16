@@ -107,11 +107,9 @@ export function CodeInput({
           autoComplete={index === 0 ? 'one-time-code' : 'off'}
           aria-label={`Цифра ${index + 1} из ${length}`}
           className={cn(
-            'h-14 w-12 rounded-xl border bg-base/70 text-center font-mono text-[22px] text-ink',
-            'transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-accent/30',
-            invalid
-              ? 'border-danger/60 focus:border-danger'
-              : 'border-line hover:border-line2 focus:border-accent/60',
+            'tnum h-12 w-11 rounded-control border bg-surface-2 py-3 text-center font-mono text-[20px] text-text',
+            'transition-colors duration-120 focus:outline-none focus:ring-2 focus:ring-accent/25',
+            invalid ? 'border-danger/60 focus:border-danger' : 'border-border hover:border-border-strong focus:border-accent/55',
             disabled && 'opacity-50',
           )}
         />

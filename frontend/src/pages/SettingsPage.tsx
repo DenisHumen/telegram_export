@@ -1,13 +1,16 @@
+import type { ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Database, FolderOpen, HardDrive, Info, RefreshCw, Server, Zap } from 'lucide-react';
+import { Database, FolderOpen, Monitor, Moon, RefreshCw, Server, Sun, Zap } from 'lucide-react';
 import { cn } from '../lib/cn';
 import * as api from '../api/client';
 import { useHealth, useJobs } from '../hooks/queries';
 import { useWsStatus } from '../hooks/useWebSocket';
+import { useThemeStore, type ThemeMode } from '../store/theme';
 import { formatDuration } from '../lib/format';
 import { toast } from '../store/ui';
+import { PageHeader } from '../components/layout/PageHeader';
 import { Button } from '../components/ui/Button';
-import { Card, CardHeader, SectionTitle } from '../components/ui/Card';
+import { Section } from '../components/ui/Card';
 import { Skeleton } from '../components/ui/Skeleton';
 
 function ServiceRow({
@@ -17,28 +20,26 @@ function ServiceRow({
   detail,
   loading,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   name: string;
   ok: boolean | null;
   detail: string;
   loading?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 px-5 py-3.5">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line bg-surface2 text-ink-muted">
-        {icon}
-      </span>
+    <div className="flex items-center gap-3 py-3">
+      <span className="shrink-0 text-muted">{icon}</span>
       <div className="min-w-0 flex-1">
-        <p className="text-[13.5px] text-ink">{name}</p>
-        <p className="truncate text-[12px] text-ink-faint">{detail}</p>
+        <p className="text-[13px] text-text">{name}</p>
+        <p className="truncate text-[12px] text-muted">{detail}</p>
       </div>
       {loading ? (
-        <Skeleton className="h-2.5 w-2.5 rounded-full" />
+        <Skeleton className="h-2 w-2 rounded-pill" />
       ) : (
         <span
           className={cn(
-            'h-2.5 w-2.5 shrink-0 rounded-full',
-            ok === null ? 'bg-ink-faint' : ok ? 'bg-success' : 'bg-danger',
+            'h-2 w-2 shrink-0 rounded-pill',
+            ok === null ? 'bg-muted' : ok ? 'bg-success' : 'bg-danger',
           )}
           aria-label={ok ? 'работает' : 'недоступен'}
         />
@@ -47,10 +48,18 @@ function ServiceRow({
   );
 }
 
+const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
+  { value: 'dark', label: 'Тёмная', icon: Moon },
+  { value: 'light', label: 'Светлая', icon: Sun },
+  { value: 'system', label: 'Как в системе', icon: Monitor },
+];
+
 export function SettingsPage() {
   const { data: health, isLoading, isError, refetch, isFetching } = useHealth();
   const { data: jobs } = useJobs({ page: 1, page_size: 1 }, false);
   const wsStatus = useWsStatus();
+  const themeMode = useThemeStore((state) => state.mode);
+  const setThemeMode = useThemeStore((state) => state.setMode);
 
   const lastOutputDir = jobs?.items.find((job) => job.output_dir)?.output_dir ?? null;
 
@@ -61,29 +70,47 @@ export function SettingsPage() {
   });
 
   return (
-    <div className="space-y-5">
-      <SectionTitle
-        title="Настройки"
-        subtitle="Состояние сервисов и информация о приложении"
-        action={
-          <Button
-            variant="secondary"
-            icon={<RefreshCw className={isFetching ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />}
-            onClick={() => void refetch()}
-          >
-            Проверить
-          </Button>
-        }
-      />
+    <div className="space-y-8">
+      <PageHeader title="Настройки" subtitle="Внешний вид, состояние сервисов и информация о приложении">
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />}
+          onClick={() => void refetch()}
+        >
+          Проверить
+        </Button>
+      </PageHeader>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card>
-          <CardHeader
-            title="Состояние системы"
-            subtitle={isError ? 'Backend недоступен' : `Статус: ${health?.status ?? '—'}`}
-            icon={<Server className="h-4 w-4" />}
-          />
-          <div className="divide-y divide-line">
+      <Section title="Оформление" description="Тема сохраняется в этом браузере" divided={false}>
+        <div className="flex flex-wrap gap-2">
+          {THEME_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setThemeMode(option.value)}
+              aria-pressed={themeMode === option.value}
+              className={cn(
+                'flex min-w-[150px] items-center gap-2.5 rounded-card border px-4 py-3 text-left transition-colors duration-120',
+                themeMode === option.value
+                  ? 'border-accent/45 bg-accent-soft text-accent'
+                  : 'border-border text-dim hover:border-border-strong hover:text-text',
+              )}
+            >
+              <option.icon className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="text-[13px] font-medium">{option.label}</span>
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      <div className="grid gap-8 border-t border-border pt-6 lg:grid-cols-2">
+        <section>
+          <h2 className="text-[13px] font-medium text-dim">Состояние системы</h2>
+          <p className="mt-0.5 text-[12.5px] text-muted">
+            {isError ? 'Backend недоступен' : `Статус: ${health?.status ?? '—'}`}
+          </p>
+          <div className="mt-3 divide-y divide-border">
             <ServiceRow
               icon={<Server className="h-4 w-4" />}
               name="Backend API"
@@ -112,43 +139,43 @@ export function SettingsPage() {
               detail="/ws · живые обновления прогресса и логов"
             />
           </div>
-        </Card>
+        </section>
 
-        <div className="space-y-5">
-          <Card>
-            <CardHeader title="Приложение" subtitle="TgVault — локальный архиватор Telegram" icon={<Info className="h-4 w-4" />} />
-            <dl className="divide-y divide-line">
+        <section className="space-y-6">
+          <div>
+            <h2 className="text-[13px] font-medium text-dim">Приложение</h2>
+            <dl className="mt-3 divide-y divide-border">
               {[
                 { label: 'Версия backend', value: health?.version ?? '—' },
                 { label: 'Аптайм', value: health ? formatDuration(health.uptime_seconds) : '—' },
                 { label: 'Frontend', value: 'React 18 · Vite · TypeScript' },
                 { label: 'Порт dev-сервера', value: '5177' },
               ].map((row) => (
-                <div key={row.label} className="flex items-center justify-between gap-4 px-5 py-3">
-                  <dt className="text-[13px] text-ink-muted">{row.label}</dt>
-                  <dd className="font-mono text-[13px] text-ink">{row.value}</dd>
+                <div key={row.label} className="flex items-center justify-between gap-4 py-2.5">
+                  <dt className="text-[13px] text-dim">{row.label}</dt>
+                  <dd className="tnum font-mono text-[12.5px] text-text">{row.value}</dd>
                 </div>
               ))}
             </dl>
-          </Card>
+          </div>
 
-          <Card>
-            <CardHeader title="Каталог данных" subtitle="Логи, экспорты и ключ шифрования" icon={<HardDrive className="h-4 w-4" />} />
-            <div className="space-y-3 p-5">
-              <div className="panel-inset px-3.5 py-3">
-                <p className="text-[11px] uppercase tracking-wide text-ink-faint">Базовый каталог</p>
-                <p className="mt-1 break-all font-mono text-[12.5px] text-ink">
-                  {'<TGV_DATA_DIR>'} · по умолчанию <span className="text-accent-soft">./data</span>
+          <div>
+            <h2 className="text-[13px] font-medium text-dim">Каталог данных</h2>
+            <div className="mt-3 space-y-3">
+              <div className="rounded-card border border-border px-4 py-3">
+                <p className="micro-label">Базовый каталог</p>
+                <p className="mt-1 break-all font-mono text-[12.5px] text-text">
+                  {'<TGV_DATA_DIR>'} · по умолчанию ./data
                 </p>
-                <p className="mt-1.5 text-[12px] leading-snug text-ink-faint">
+                <p className="mt-1.5 text-[12px] leading-snug text-muted">
                   Внутри: <span className="font-mono">logs/</span>, <span className="font-mono">exports/</span>,{' '}
                   <span className="font-mono">secret.key</span>
                 </p>
               </div>
               {lastOutputDir ? (
-                <div className="panel-inset px-3.5 py-3">
-                  <p className="text-[11px] uppercase tracking-wide text-ink-faint">Последний каталог экспорта</p>
-                  <p className="mt-1 break-all font-mono text-[12.5px] text-ink">{lastOutputDir}</p>
+                <div className="rounded-card border border-border px-4 py-3">
+                  <p className="micro-label">Последний каталог экспорта</p>
+                  <p className="mt-1 break-all font-mono text-[12.5px] text-text">{lastOutputDir}</p>
                   <Button
                     size="sm"
                     variant="secondary"
@@ -162,8 +189,8 @@ export function SettingsPage() {
                 </div>
               ) : null}
             </div>
-          </Card>
-        </div>
+          </div>
+        </section>
       </div>
     </div>
   );

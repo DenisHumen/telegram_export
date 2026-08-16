@@ -6,15 +6,15 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function SkeletonRows({ rows = 5, className }: { rows?: number; className?: string }) {
   return (
-    <div className={cn('space-y-2.5', className)}>
+    <div className={cn('divide-y divide-border rounded-card border border-border', className)}>
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="flex items-center gap-3 rounded-xl border border-line bg-surface2/40 px-3 py-3">
-          <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
+        <div key={index} className="flex items-center gap-3 px-4 py-3.5">
+          <Skeleton className="h-8 w-8 shrink-0 rounded-pill" />
           <div className="flex-1 space-y-2">
-            <Skeleton className="h-3.5" />
             <Skeleton className="h-3 w-1/3" />
+            <Skeleton className="h-2.5 w-1/5" />
           </div>
-          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-2.5 w-16" />
         </div>
       ))}
     </div>
@@ -27,15 +27,15 @@ export function SkeletonCards({ count = 6, className }: { count?: number; classN
       {Array.from({ length: count }).map((_, index) => (
         <div key={index} className="card p-5">
           <div className="flex items-center gap-3">
-            <Skeleton className="h-11 w-11 rounded-2xl" />
+            <Skeleton className="h-10 w-10 rounded-control" />
             <div className="flex-1 space-y-2">
-              <Skeleton className="h-3.5 w-2/3" />
-              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="h-3 w-2/3" />
+              <Skeleton className="h-2.5 w-1/3" />
             </div>
           </div>
           <div className="mt-5 space-y-2.5">
-            <Skeleton className="h-3" />
-            <Skeleton className="h-3 w-4/5" />
+            <Skeleton className="h-2.5" />
+            <Skeleton className="h-2.5 w-4/5" />
           </div>
         </div>
       ))}

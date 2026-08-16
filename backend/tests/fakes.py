@@ -152,11 +152,29 @@ class FakeTotal(list):
 class FakeClient:
     """Implements only what :class:`app.tg.exporter.ExportEngine` calls."""
 
-    def __init__(self, messages: list[FakeMessage], *, fail_first_download: bool = False) -> None:
+    def __init__(
+        self,
+        messages: list[FakeMessage],
+        *,
+        fail_first_download: bool = False,
+        hang_iter_after: int | None = None,
+        hang_download: bool = False,
+    ) -> None:
         self.messages = messages
         self.downloads: list[str] = []
         self.fail_first_download = fail_first_download
+        # Reproduce the failure seen in production: Telegram accepts the
+        # request and simply never answers. Without a timeout this hangs the
+        # export forever with no error at all.
+        self.hang_iter_after = hang_iter_after
+        self.hang_download = hang_download
         self._failed_once = False
+        #: Fail this many attempts per file before succeeding (transient errors).
+        self.flaky_attempts = 0
+        #: Write half the file, then fail — exercises resume-from-offset.
+        self.partial_fail_once = False
+        self.resumed: list[str] = []
+        self._attempts: dict[str, int] = {}
 
     def is_connected(self) -> bool:
         return True
@@ -172,11 +190,29 @@ class FakeClient:
 
     async def get_messages(self, entity: Any, limit: int | None = None, ids: Any = None) -> Any:
         if ids is not None:
+            if isinstance(ids, (list, tuple, set)):
+                wanted = set(ids)
+                return [m for m in self.messages if m.id in wanted]
             for message in self.messages:
                 if message.id == ids:
                     return message
             return None
         return FakeTotal(len(self.messages))
+
+    def iter_download(self, message: Any, offset: int = 0, request_size: int = 524288, **_: Any):
+        """Byte stream from ``offset`` — what the resume path uses."""
+        size = getattr(getattr(message, "file", None), "size", 0) or 512
+        self.resumed.append(f"{getattr(message, 'id', '?')}@{offset}")
+
+        async def generator():
+            position = offset
+            while position < size:
+                step = min(request_size, size - position)
+                await asyncio.sleep(0)
+                yield b"\x00" * step
+                position += step
+
+        return generator()
 
     def iter_messages(self, entity: Any, **kwargs: Any):
         reverse = kwargs.get("reverse", True)
@@ -189,7 +225,9 @@ class FakeClient:
             selected = selected[:limit]
 
         async def generator():
-            for message in selected:
+            for index, message in enumerate(selected):
+                if self.hang_iter_after is not None and index >= self.hang_iter_after:
+                    await asyncio.sleep(3600)  # never answers
                 await asyncio.sleep(0)
                 yield message
 
@@ -198,12 +236,30 @@ class FakeClient:
     async def download_media(
         self, message: Any, file: str | None = None, progress_callback=None, **_: Any
     ) -> str | None:
+        if self.hang_download:
+            await asyncio.sleep(3600)  # never answers
         if self.fail_first_download and not self._failed_once:
             self._failed_once = True
             raise OSError("simulated network hiccup")
+
         size = getattr(getattr(message, "file", None), "size", 0) or 512
         path = Path(file)
         path.parent.mkdir(parents=True, exist_ok=True)
+
+        attempts = self._attempts.get(str(path), 0) + 1
+        self._attempts[str(path)] = attempts
+
+        if self.partial_fail_once and attempts == 1:
+            # Leave a real partial file behind, like a dropped connection would.
+            half = max(1, size // 2)
+            path.write_bytes(b"\x00" * half)
+            if progress_callback:
+                progress_callback(half, size)
+            raise ConnectionError("simulated drop mid-transfer")
+
+        if self.flaky_attempts and attempts <= self.flaky_attempts:
+            raise ConnectionError(f"simulated transient failure #{attempts}")
+
         path.write_bytes(b"\x00" * size)
         if progress_callback:
             progress_callback(size, size)

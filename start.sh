@@ -88,6 +88,10 @@ OPT_FRESH=0
 OPT_LOGS=0
 OPT_BROWSER=1
 OPT_PORT=""
+OPT_SUDO_DOCKER=0
+# Все обращения к docker идут через эту переменную, чтобы --sudo-docker
+# работал единообразно (в т.ч. в docker compose и docker inspect).
+DOCKER_BIN="docker"
 
 usage() {
   cat <<'EOF'
@@ -96,6 +100,8 @@ TgVault — единая точка запуска.
 Использование: ./start.sh [флаги]
 
   --no-docker      не трогать docker: MySQL/Redis уже запущены и описаны в .env
+  --sudo-docker    вызывать docker через sudo (когда пользователь не в группе
+                   docker и нет прав на /var/run/docker.sock)
   --no-frontend    только API, фронтенд не ставить и не собирать
   --dev            запустить Vite dev-сервер (порт TGV_FRONTEND_PORT) вместо
                    собранного бандла frontend/dist
@@ -117,6 +123,7 @@ EOF
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-docker)   OPT_DOCKER=0 ;;
+    --sudo-docker) OPT_SUDO_DOCKER=1 ;;
     --no-frontend) OPT_FRONTEND=0 ;;
     --dev)         OPT_DEV=1 ;;
     --rebuild)     OPT_REBUILD=1 ;;
@@ -339,20 +346,53 @@ if [ "$OPT_DOCKER" -eq 1 ]; then
     "Вариант 1: установите Docker Desktop — https://www.docker.com/products/docker-desktop" \
     "Вариант 2: поднимите MySQL 8 и Redis 7 сами и запустите:" \
     "           ./start.sh --no-docker   (адреса и пароли пропишите в .env)"
-  if ! docker info >/dev/null 2>&1; then
-    die "Docker установлен, но демон недоступен." \
-      "Запустите Docker Desktop (или 'sudo systemctl start docker') и повторите." \
-      "Либо: ./start.sh --no-docker с уже поднятыми MySQL/Redis в .env"
+  if [ "$OPT_SUDO_DOCKER" -eq 1 ]; then
+    have sudo || die "--sudo-docker указан, но команда 'sudo' не найдена."
+    DOCKER_BIN="sudo docker"
+    info "docker вызывается через sudo (--sudo-docker); может спросить пароль"
   fi
-  if docker compose version >/dev/null 2>&1; then
-    DC="docker compose"
+
+  # Важно разделять две разные причины отказа: демон не запущен и нет прав на
+  # сокет. Раньше обе давали совет «запустите демон», что бесполезно, когда
+  # демон уже работает, а пользователь просто не состоит в группе docker.
+  DOCKER_ERR="$($DOCKER_BIN info 2>&1 >/dev/null || true)"
+  if [ -n "$DOCKER_ERR" ]; then
+    case "$DOCKER_ERR" in
+      *"ermission denied"*)
+        die "Нет прав на сокет Docker — демон запущен, но недоступен вашему пользователю." \
+          "Ваш пользователь не входит в группу 'docker'." \
+          "" \
+          "Постоянное решение:" \
+          "    sudo usermod -aG docker \$USER && newgrp docker" \
+          "(newgrp применит группу к текущей оболочке; в новых терминалах — само)" \
+          "" \
+          "Разовый обход:  ./start.sh --sudo-docker" \
+          "Без docker:     ./start.sh --no-docker  (MySQL/Redis подняты вами, адреса в .env)"
+        ;;
+      *"annot connect to the Docker daemon"*|*"docker daemon is not running"*|*"pipe/dockerDesktop"*)
+        die "Docker установлен, но демон не отвечает." \
+          "Linux:   sudo systemctl start docker" \
+          "Win/Mac: запустите Docker Desktop и дождитесь статуса Running" \
+          "Либо:    ./start.sh --no-docker с уже поднятыми MySQL/Redis в .env"
+        ;;
+      *)
+        die "Docker недоступен. Ответ 'docker info':" \
+          "    ${DOCKER_ERR}" \
+          "Либо: ./start.sh --no-docker с уже поднятыми MySQL/Redis в .env"
+        ;;
+    esac
+  fi
+
+  if $DOCKER_BIN compose version >/dev/null 2>&1; then
+    DC="$DOCKER_BIN compose"
   elif have docker-compose && docker-compose version >/dev/null 2>&1; then
     DC="docker-compose"
+    [ "$OPT_SUDO_DOCKER" -eq 1 ] && DC="sudo docker-compose"
   else
     die "Не найден ни 'docker compose', ни 'docker-compose'." \
-      "Обновите Docker Desktop / установите плагин compose."
+      "Установите плагин compose (Fedora: sudo dnf install docker-compose-plugin)."
   fi
-  ok "docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || echo '?') ($DC)"
+  ok "docker $($DOCKER_BIN version --format '{{.Server.Version}}' 2>/dev/null || echo '?') ($DC)"
 else
   info "docker пропущен (--no-docker): MySQL/Redis должны быть уже запущены."
 fi
@@ -424,7 +464,7 @@ dc() {
 }
 
 container_health() {
-  _st="$(MSYS_NO_PATHCONV=1 docker inspect \
+  _st="$(MSYS_NO_PATHCONV=1 $DOCKER_BIN inspect \
       --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}nohealth{{end}}' \
       "$1" 2>/dev/null || true)"
   [ -n "$_st" ] || _st="missing"

@@ -27,9 +27,15 @@ from app.config import settings
 _LOG_FORMAT = "%(asctime)s %(levelname)-7s [%(name)s] %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-#: Loggers excluded from the DB sink — writing SQL logs through SQLAlchemy
-#: would recurse; Telethon's debug chatter would flood the table.
-_DB_SINK_DENYLIST = ("sqlalchemy", "aiomysql", "asyncio", "telethon.network", "uvicorn.access")
+#: Loggers excluded from the DB sink.
+#:
+#: ``sqlalchemy``/``aiomysql`` would recurse (the sink writes through them).
+#: **All** of ``telethon`` is excluded, not just ``telethon.network``: at INFO
+#: it emits a line per chunk ("Starting direct file download in chunks of
+#: 131072…"), which during a real export buries our own messages in the UI log
+#: and writes tens of thousands of rows to MySQL for no benefit. The full
+#: Telethon stream still goes to ``data/logs/telegram.log``.
+_DB_SINK_DENYLIST = ("sqlalchemy", "aiomysql", "asyncio", "telethon", "uvicorn.access")
 
 _pending: "queue.SimpleQueue[dict[str, Any]]" = queue.SimpleQueue()
 _writer_task: asyncio.Task | None = None

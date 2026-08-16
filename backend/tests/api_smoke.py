@@ -141,6 +141,7 @@ def main() -> int:
     check("GET", "/api/export/jobs")
     check("GET", f"/api/export/jobs?account_id={account_id}&status=all")
     check("GET", "/api/export/jobs/999999", expect=(404,))
+    check("GET", "/api/export/jobs/999999/files", expect=(404,))
     check("POST", "/api/export/jobs", expect=(404, 400, 422),
           body={"account_id": account_id, "chat_id": 999999, "options": {}})
 

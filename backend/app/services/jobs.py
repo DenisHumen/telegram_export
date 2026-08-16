@@ -21,7 +21,13 @@ from app.db.base import utcnow
 from app.db.models import Chat, ExportJob, JobEvent
 from app.db.session import session_scope
 from app.services.options import ExportOptions
-from app.tg.exporter import ExportEngine, JobControl, controls, job_to_dict
+from app.tg.exporter import (
+    ExportEngine,
+    JobControl,
+    active_downloads,
+    controls,
+    job_to_dict,
+)
 
 log = logging.getLogger("tgvault.jobs")
 
@@ -207,19 +213,79 @@ async def resume_job(session: AsyncSession, job: ExportJob) -> ExportJob:
     return job
 
 
+#: How long a cancelled job may take to stop cooperatively before it is killed.
+CANCEL_GRACE_SECONDS = 8.0
+
+
 async def cancel_job(session: AsyncSession, job: ExportJob) -> ExportJob:
     control = controls.get(job.id)
     if control is not None:
         control.cancel()
-        job.status = "cancelled"
-    else:
-        job.status = "cancelled"
+    job.status = "cancelled"
+    if not is_running(job.id):
         job.finished_at = utcnow()
         job.phase = "done"
     await session.flush()
     session.add(JobEvent(job_id=job.id, level="warning", message="Задача отменена"))
+
+    # Cooperative cancellation only lands when the coroutine reaches a
+    # checkpoint. A task blocked on a Telegram call that never returns would
+    # otherwise stay alive forever — leaving the job "running" internally and
+    # making it undeletable. Kill it after a grace period.
+    if is_running(job.id):
+        asyncio.create_task(
+            _kill_after_grace(job.id, CANCEL_GRACE_SECONDS), name=f"kill-{job.id}"
+        )
+
     await _notify(session, job)
     return job
+
+
+async def _kill_after_grace(job_id: int, grace: float) -> None:
+    await asyncio.sleep(grace)
+    task = _tasks.get(job_id)
+    if task is None or task.done():
+        return
+    log.warning(
+        "Job #%s ignored cancellation for %.0fs — terminating the task", job_id, grace
+    )
+    task.cancel()
+    with suppress(asyncio.CancelledError, Exception):
+        await task
+    _tasks.pop(job_id, None)
+    controls.pop(job_id, None)
+    active_downloads.pop(job_id, None)
+    async with session_scope() as session:
+        job = await session.get(ExportJob, job_id)
+        if job is not None and job.status in {"running", "queued", "paused", "cancelled"}:
+            job.status = "cancelled"
+            job.phase = "done"
+            job.finished_at = utcnow()
+            session.add(
+                JobEvent(
+                    job_id=job_id,
+                    level="warning",
+                    message="Задача не остановилась сама и была снята принудительно",
+                )
+            )
+
+
+async def force_stop(job_id: int) -> None:
+    """Terminate a job's task immediately, no grace period.
+
+    Used before deleting a job: whatever state the engine is in, the row must
+    become deletable.
+    """
+    control = controls.get(job_id)
+    if control is not None:
+        control.cancel()
+    task = _tasks.pop(job_id, None)
+    if task is not None and not task.done():
+        task.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await task
+    controls.pop(job_id, None)
+    active_downloads.pop(job_id, None)
 
 
 async def rebuild_outputs(

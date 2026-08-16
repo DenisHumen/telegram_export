@@ -30,7 +30,16 @@ os.environ["TGV_LOG_LEVEL"] = "WARNING"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.db.bootstrap import init_db, reset_db  # noqa: E402
-from app.db.models import Account, Chat, ExportJob, MediaFile, Message  # noqa: E402
+from sqlalchemy import func, select  # noqa: E402
+
+from app.db.models import (  # noqa: E402
+    Account,
+    Chat,
+    ExportJob,
+    JobEvent,
+    MediaFile,
+    Message,
+)
 from app.db.session import dispose_engine, session_scope  # noqa: E402
 from app.services.jobs import create_job  # noqa: E402
 from app.services.layout import directory_for, render_filename  # noqa: E402
@@ -412,7 +421,241 @@ async def test_export() -> None:
     check((thumbs_dir / "media" / "thumbnails").is_dir(), "каталог media/thumbnails создан")
     check((thumbs_dir / "media" / "avatars").is_dir(), "каталог media/avatars создан")
 
-    print("\n[10] Отмена задачи")
+    print("\n[10] Telegram перестал отвечать на запрос истории")
+    # Регрессия: раньше задача висела вечно со статусом «Выполняется»,
+    # без ошибки в журнале и без возможности её снять.
+    import app.tg.exporter as exporter_module
+
+    original_fetch_timeout = exporter_module._FETCH_TIMEOUT
+    exporter_module._FETCH_TIMEOUT = 2.0
+    try:
+        hang_client = FakeClient(build_messages(12), hang_iter_after=4)
+        _install_fake_client(account_id, hang_client)
+        async with session_scope() as session:
+            job5 = await create_job(
+                session,
+                account_id=account_id,
+                chat_id=chat_id,
+                options=ExportOptions(
+                    formats=["json"],
+                    output_dir=str(_TMP_DATA / "exports" / "run_hang"),
+                    incremental=False,
+                    skip_existing=False,
+                ),
+            )
+            job5_id = job5.id
+
+        started = asyncio.get_event_loop().time()
+        await asyncio.wait_for(ExportEngine(job5_id, JobControl()).run(), timeout=60)
+        elapsed = asyncio.get_event_loop().time() - started
+    finally:
+        exporter_module._FETCH_TIMEOUT = original_fetch_timeout
+
+    check(elapsed < 30, f"задача не зависла, завершилась за {elapsed:.1f} с")
+    async with session_scope() as session:
+        job5 = await session.get(ExportJob, job5_id)
+        check(job5.status == "failed", f"статус: {job5.status} (ожидался failed)")
+        check(
+            bool(job5.error) and "не ответил" in (job5.error or ""),
+            f"причина понятна пользователю: {job5.error}",
+        )
+        events = (
+            await session.execute(
+                select(JobEvent).where(JobEvent.job_id == job5_id, JobEvent.level == "error")
+            )
+        ).scalars().all()
+        check(len(events) > 0, f"в журнале задачи есть запись об ошибке ({len(events)})")
+
+    print("\n[11] Отмена задачи, зависшей на скачивании")
+    # Регрессия: задача не реагировала на отмену, оставалась в реестре
+    # выполняющихся и её нельзя было удалить («Сначала остановите задачу»).
+    import app.services.jobs as jobs_module
+
+    original_grace = jobs_module.CANCEL_GRACE_SECONDS
+    jobs_module.CANCEL_GRACE_SECONDS = 1.0
+    try:
+        stuck_client = FakeClient(build_messages(12), hang_download=True)
+        _install_fake_client(account_id, stuck_client)
+        async with session_scope() as session:
+            job6 = await create_job(
+                session,
+                account_id=account_id,
+                chat_id=chat_id,
+                options=ExportOptions(
+                    formats=["json"],
+                    output_dir=str(_TMP_DATA / "exports" / "run_stuck"),
+                    incremental=False,
+                    skip_existing=False,
+                    concurrency=2,
+                ),
+            )
+            job6_id = job6.id
+
+        await jobs_module.launch(job6_id)
+        for _ in range(40):
+            await asyncio.sleep(0.25)
+            if jobs_module.active_downloads.get(job6_id):
+                break
+        check(
+            bool(jobs_module.active_downloads.get(job6_id)),
+            "задача действительно начала качать (и зависла)",
+        )
+
+        async with session_scope() as session:
+            job6 = await session.get(ExportJob, job6_id)
+            await jobs_module.cancel_job(session, job6)
+
+        for _ in range(60):
+            await asyncio.sleep(0.25)
+            if not jobs_module.is_running(job6_id):
+                break
+        check(
+            not jobs_module.is_running(job6_id),
+            "зависшая задача снята принудительно, реестр очищен",
+        )
+    finally:
+        jobs_module.CANCEL_GRACE_SECONDS = original_grace
+
+    async with session_scope() as session:
+        job6 = await session.get(ExportJob, job6_id)
+        check(job6.status == "cancelled", f"статус после отмены: {job6.status}")
+        # Именно эта проверка стоит в DELETE /api/export/jobs/{id}
+        blocked = job6.status in {"queued", "running", "paused"} and jobs_module.is_running(
+            job6_id
+        )
+        check(not blocked, "удаление больше не блокируется")
+        await jobs_module.force_stop(job6_id)
+        await session.delete(job6)
+    check(True, "задача удалена без ошибки")
+
+    print("\n[12] Неограниченные повторы: ни один файл не теряется")
+    flaky = FakeClient(build_messages(12))
+    flaky.flaky_attempts = 3  # каждая загрузка падает трижды подряд
+    _install_fake_client(account_id, flaky)
+    async with session_scope() as session:
+        job7 = await create_job(
+            session,
+            account_id=account_id,
+            chat_id=chat_id,
+            options=ExportOptions(
+                formats=["json"],
+                output_dir=str(_TMP_DATA / "exports" / "run_flaky"),
+                incremental=False,
+                skip_existing=False,
+                retry_forever=True,
+            ),
+        )
+        job7_id = job7.id
+    await ExportEngine(job7_id, JobControl()).run()
+
+    async with session_scope() as session:
+        job7 = await session.get(ExportJob, job7_id)
+        outstanding = await session.scalar(
+            select(func.count(MediaFile.id)).where(
+                MediaFile.chat_id == chat_id,
+                MediaFile.status.in_(("failed", "pending", "downloading")),
+            )
+        )
+    check(job7.status == "completed", f"задача завершена: {job7.status}")
+    check(outstanding == 0, f"недокачанных файлов не осталось: {outstanding}")
+    check(job7.downloaded_files == 10, f"скачано всё: {job7.downloaded_files}/10")
+
+    print("\n[13] Докачка файла с места обрыва")
+    # Файлы должны быть крупнее чанка (512 КБ), иначе докачивать нечего
+    # и движок штатно качает заново — на мелочи это дешевле.
+    from datetime import datetime as _dt
+    from datetime import timedelta as _td
+    from datetime import timezone as _tz
+
+    big_messages = [
+        FakeMessage(
+            index + 1,
+            _dt(2026, 2, 1, tzinfo=_tz.utc) + _td(hours=index),
+            kind="video",
+            text=None,
+            size=4_000_000,
+        )
+        for index in range(3)
+    ]
+    resuming = FakeClient(big_messages)
+    resuming.partial_fail_once = True  # обрыв на середине каждого файла
+    _install_fake_client(account_id, resuming)
+    resume_dir = _TMP_DATA / "exports" / "run_resume"
+    async with session_scope() as session:
+        job8 = await create_job(
+            session,
+            account_id=account_id,
+            chat_id=chat_id,
+            options=ExportOptions(
+                formats=["json"],
+                output_dir=str(resume_dir),
+                incremental=False,
+                skip_existing=False,
+                retry_forever=True,
+                resume_partial=True,
+                concurrency=1,
+            ),
+        )
+        job8_id = job8.id
+    await ExportEngine(job8_id, JobControl()).run()
+
+    offsets = [int(entry.split("@")[1]) for entry in resuming.resumed]
+    check(len(offsets) > 0, f"докачка была запрошена ({len(offsets)} раз)")
+    check(
+        bool(offsets) and all(value > 0 for value in offsets),
+        f"смещения ненулевые — файл не качался заново с начала: {offsets[:3]}",
+    )
+    check(
+        bool(offsets) and all(value % 4096 == 0 for value in offsets),
+        "смещения выровнены по 4096, как требует Telegram",
+    )
+    async with session_scope() as session:
+        files = (
+            await session.execute(
+                select(MediaFile).where(
+                    MediaFile.chat_id == chat_id, MediaFile.status == "done"
+                )
+            )
+        ).scalars().all()
+        broken = [
+            f for f in files
+            if f.size and f.abs_path and Path(f.abs_path).exists()
+            and Path(f.abs_path).stat().st_size != f.size
+        ]
+    check(not broken, f"размеры докачанных файлов совпадают с ожидаемыми ({len(broken)} расхождений)")
+
+    print("\n[14] Финальный добор после исчерпания попыток")
+    stubborn = FakeClient(build_messages(6))
+    stubborn.flaky_attempts = 7  # больше, чем попыток в основном проходе
+    _install_fake_client(account_id, stubborn)
+    async with session_scope() as session:
+        job9 = await create_job(
+            session,
+            account_id=account_id,
+            chat_id=chat_id,
+            options=ExportOptions(
+                formats=["json"],
+                output_dir=str(_TMP_DATA / "exports" / "run_sweep"),
+                incremental=False,
+                skip_existing=False,
+                retry_forever=False,  # основной проход сдастся через max_retries
+                final_sweep=True,
+                concurrency=2,
+            ),
+        )
+        job9_id = job9.id
+    await ExportEngine(job9_id, JobControl()).run()
+
+    async with session_scope() as session:
+        left = await session.scalar(
+            select(func.count(MediaFile.id)).where(
+                MediaFile.chat_id == chat_id,
+                MediaFile.status.in_(("failed", "pending", "downloading")),
+            )
+        )
+    check(left == 0, f"добор вытянул всё, что не осилил основной проход: осталось {left}")
+
+    print("\n[15] Отмена задачи")
     async with session_scope() as session:
         job3 = await create_job(
             session,

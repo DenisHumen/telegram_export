@@ -2,13 +2,75 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   TgVault design tokens — warm, paper-like, content-first.
+   Single source of truth: the `--c-*` triplets hold "R G B" channels so
+   Tailwind can apply opacity modifiers (`bg-accent/12`); the plain aliases
+   (`--accent`, `--surface`, …) are derived from them for raw CSS / SVG use.
+   Dark is the default; light is opted into via <html data-theme="light">.
+   ========================================================================== */
+
 @layer base {
   :root {
+    /* ---------------------------------------------------------- dark */
+    --c-bg: 38 38 36; /* #262624 warm charcoal */
+    --c-surface: 48 48 46; /* #30302E */
+    --c-surface-2: 58 58 56; /* #3A3A38 */
+    --c-text: 245 244 239; /* #F5F4EF */
+    --c-text-dim: 184 181 172; /* #B8B5AC */
+    --c-text-muted: 138 135 128; /* #8A8780 */
+    --c-accent: 217 119 87; /* #D97757 clay */
+    --c-accent-hover: 196 102 74; /* #C4664A */
+    --c-success: 127 169 107; /* #7FA96B */
+    --c-warning: 194 133 58; /* #C2853A */
+    --c-danger: 188 91 82; /* #BC5B52 */
+
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --accent-soft: rgba(217, 119, 87, 0.14);
+    --hover-veil: rgba(255, 255, 255, 0.04);
+    --scrim: rgba(15, 15, 14, 0.62);
+
+    /* literal aliases, for inline styles and SVG */
+    --bg: rgb(var(--c-bg));
+    --surface: rgb(var(--c-surface));
+    --surface-2: rgb(var(--c-surface-2));
+    --text: rgb(var(--c-text));
+    --text-dim: rgb(var(--c-text-dim));
+    --text-muted: rgb(var(--c-text-muted));
+    --accent: rgb(var(--c-accent));
+    --accent-hover: rgb(var(--c-accent-hover));
+    --success: rgb(var(--c-success));
+    --warning: rgb(var(--c-warning));
+    --danger: rgb(var(--c-danger));
+
     color-scheme: dark;
   }
 
+  :root[data-theme='light'] {
+    --c-bg: 250 249 245; /* #FAF9F5 warm cream */
+    --c-surface: 255 255 255; /* #FFFFFF */
+    --c-surface-2: 240 238 230; /* #F0EEE6 */
+    --c-text: 31 30 29; /* #1F1E1D */
+    --c-text-dim: 92 90 84; /* #5C5A54 */
+    --c-text-muted: 138 135 128; /* #8A8780 */
+    --c-accent: 193 95 60; /* #C15F3C */
+    --c-accent-hover: 169 79 48; /* #A94F30 */
+    --c-success: 92 138 76; /* #5C8A4C */
+    --c-warning: 166 106 40; /* #A66A28 */
+    --c-danger: 168 72 63; /* #A8483F */
+
+    --border: #e5e3dc;
+    --border-strong: #d6d3c9;
+    --accent-soft: rgba(193, 95, 60, 0.1);
+    --hover-veil: rgba(31, 30, 29, 0.04);
+    --scrim: rgba(38, 38, 36, 0.28);
+
+    color-scheme: light;
+  }
+
   * {
-    border-color: theme('colors.line');
+    border-color: var(--border);
   }
 
   html,
@@ -17,20 +79,30 @@
     height: 100%;
   }
 
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
-    @apply bg-base text-ink font-sans antialiased;
-    background-image:
-      radial-gradient(900px 520px at 12% -8%, rgba(51, 144, 236, 0.10), transparent 60%),
-      radial-gradient(760px 460px at 96% 0%, rgba(92, 200, 255, 0.06), transparent 62%);
-    background-attachment: fixed;
+    @apply bg-bg text-text font-sans antialiased;
+    font-size: 14px;
+    line-height: 1.55;
   }
 
   ::selection {
-    background: rgba(51, 144, 236, 0.35);
+    background: var(--accent-soft);
+    color: var(--text);
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-base rounded-md;
+    @apply outline-none ring-2 ring-accent/45 ring-offset-2 ring-offset-bg rounded-[10px];
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.01em;
   }
 
   ::-webkit-scrollbar {
@@ -41,13 +113,13 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.09);
+    background: var(--border-strong);
     border-radius: 999px;
-    border: 2px solid transparent;
+    border: 3px solid transparent;
     background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.18);
+    background: rgb(var(--c-text-muted) / 0.55);
     background-clip: content-box;
   }
 
@@ -60,51 +132,68 @@
     -moz-appearance: textfield;
   }
 
-  input[type='date']::-webkit-calendar-picker-indicator {
-    filter: invert(0.7);
+  :root:not([data-theme='light']) input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(0.72);
+    cursor: pointer;
+  }
+  :root[data-theme='light'] input[type='date']::-webkit-calendar-picker-indicator {
+    opacity: 0.55;
     cursor: pointer;
   }
 }
 
 @layer components {
+  /* A card is a slightly lighter surface with a hairline — never a drop shadow. */
   .card {
-    @apply rounded-2xl border border-line bg-surface shadow-card;
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 120px);
+    @apply rounded-[14px] border border-border bg-surface;
   }
 
   .card-hover {
-    @apply transition-all duration-150 hover:-translate-y-0.5 hover:border-line2 hover:shadow-lift;
+    @apply transition-colors duration-150 hover:border-border-strong;
   }
 
-  .panel-inset {
-    @apply rounded-xl border border-line bg-base/60;
+  /* Elevation for floating layers (menus, modals, toasts): lighter surface +
+     a strong hairline, plus the faintest possible ambient shadow. */
+  .elevated {
+    @apply rounded-[14px] border border-border-strong bg-surface;
+    box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.55);
   }
 
   .label {
-    @apply block text-[12px] font-medium uppercase tracking-wide text-ink-faint mb-1.5;
+    @apply mb-1.5 block text-[12px] font-medium text-dim;
+  }
+
+  .micro-label {
+    @apply text-[11px] font-medium uppercase text-muted;
+    letter-spacing: 0.06em;
   }
 
   .field {
-    @apply w-full rounded-xl border border-line bg-base/70 px-3.5 py-2.5 text-sm text-ink
-           placeholder:text-ink-faint transition-colors duration-150
-           hover:border-line2 focus:border-accent/60 focus:bg-base focus:outline-none
-           focus:ring-2 focus:ring-accent/25 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply w-full rounded-[10px] border border-border bg-surface-2 px-3 py-2 text-[13.5px] text-text
+           placeholder:text-muted transition-colors duration-150
+           hover:border-border-strong focus:border-accent/55 focus:outline-none
+           focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .skeleton {
-    @apply rounded-lg bg-surface2;
+    @apply rounded-[10px] bg-surface-2;
     background-image: linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0.02) 0px,
-      rgba(255, 255, 255, 0.07) 220px,
-      rgba(255, 255, 255, 0.02) 440px
+      rgb(var(--c-text) / 0) 0px,
+      rgb(var(--c-text) / 0.06) 220px,
+      rgb(var(--c-text) / 0) 440px
     );
     background-size: 900px 100%;
-    @apply animate-shimmer;
+    animation: shimmer 2.2s linear infinite;
   }
 
   .scroll-thin {
     scrollbar-width: thin;
+  }
+
+  /* Flat section: a header + hairline instead of a nested card. */
+  .section-divide > * + * {
+    @apply border-t border-border;
   }
 }
 
@@ -112,11 +201,158 @@
   .text-balance {
     text-wrap: balance;
   }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+}
+
+/* ------------------------------------------------------------------ motion */
+
+@keyframes shimmer {
+  0% {
+    background-position: -450px 0;
+  }
+  100% {
+    background-position: 450px 0;
+  }
+}
+
+@keyframes sheen {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes row-out {
+  from {
+    opacity: 1;
+    max-height: 44px;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes value-flash {
+  0% {
+    color: var(--accent);
+  }
+  100% {
+    color: inherit;
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* The animated highlight that travels along a running progress fill. */
+.progress-sheen {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  background: linear-gradient(90deg, rgb(var(--c-text) / 0), rgb(var(--c-text) / 0.28), rgb(var(--c-text) / 0));
+  animation: sheen 2s ease-in-out infinite;
+}
+
+.value-flash {
+  animation: value-flash 400ms ease-out;
+}
+
+/* Live download rows: fade + height on the way out. */
+.row-exit {
+  overflow: hidden;
+  animation: row-out 200ms ease-in forwards;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* No looping decoration and no transforms at all. */
+  .progress-sheen {
+    display: none !important;
+  }
+
+  .skeleton {
+    background-image: none !important;
+  }
+
+  [class*='animate-'],
+  .value-flash {
+    transform: none !important;
   }
 }

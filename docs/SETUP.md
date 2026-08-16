@@ -24,6 +24,29 @@ Python ищется как `python`, затем `python3`, затем `py -3`.
 > **Примечание:** Node.js обязателен только если нужен UI. С флагом `--no-frontend` работает
 > API-only режим: REST + WebSocket + Swagger на `/docs`.
 
+Верхней границы по версии Python нет. Зависимости заданы диапазонами, а не точными
+пинами, и из списка убрано всё, что не импортируется кодом, — из-за этого остаётся
+единственный пакет с компилируемым расширением (`cryptography`). Так проект ставится
+и на 3.12, и на 3.14, где для точных старых версий колёс может не быть.
+
+### Linux: установка и права на Docker
+
+```bash
+sudo dnf install -y python3 nodejs npm docker docker-compose-plugin   # Fedora
+sudo apt install -y python3 python3-venv nodejs npm docker.io docker-compose-plugin   # Debian/Ubuntu
+```
+
+Запустить демон и — обязательно — добавить себя в группу `docker`, иначе `start.sh`
+не сможет открыть `/var/run/docker.sock`, даже когда демон работает:
+
+```bash
+sudo systemctl enable --now docker && sudo usermod -aG docker $USER && newgrp docker
+```
+
+`newgrp` применяет группу к текущему терминалу; в новых она подхватится сама.
+Если менять группы не хочется — `./start.sh --sudo-docker`
+(подробнее в [TROUBLESHOOTING](TROUBLESHOOTING.md#демон-запущен-но-нет-прав-на-сокет-docker)).
+
 ---
 
 ## 2. Получение `api_id` / `api_hash`
@@ -75,6 +98,7 @@ TGV_DEFAULT_API_HASH=0123456789abcdef0123456789abcdef
 | Флаг | Действие |
 |---|---|
 | `--no-docker` | не трогать docker; MySQL/Redis считаются уже поднятыми и описанными в `.env` |
+| `--sudo-docker` | вызывать docker через `sudo` — когда пользователь не в группе `docker` и нет прав на `/var/run/docker.sock`. Тот же флаг понимает `./stop.sh` |
 | `--no-frontend` | только API: npm не запускается, фронтенд не собирается |
 | `--dev` | вместо собранного `frontend/dist` поднять Vite dev-сервер на `TGV_FRONTEND_PORT` (5177) |
 | `--rebuild` | принудительно переустановить python-зависимости и пересобрать фронтенд; backend перезапускается |

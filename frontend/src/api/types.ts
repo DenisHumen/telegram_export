@@ -278,6 +278,16 @@ export interface CreateJobRequest {
   options: ExportOptions;
 }
 
+/** A file the exporter is downloading right now (payload of `ExportJob.active_files`). */
+export interface ActiveFile {
+  media_id: number;
+  file_name: string;
+  kind: string; // photo | video | video_note | voice | audio | document | sticker | animation | thumb | avatar
+  received: number; // bytes so far
+  total: number | null; // bytes expected, may be null
+  speed_bps: number; // this file's own speed
+}
+
 export interface ExportJob {
   id: number;
   account_id: number;
@@ -295,12 +305,48 @@ export interface ExportJob {
   skipped_files: number;
   bytes_total: number;
   bytes_downloaded: number;
+  /** Current speed, rolling ~10s window. */
   speed_bps: number;
+  /** Average over the whole run. Added by a newer backend — read defensively. */
+  avg_speed_bps: number;
+  /** Currently downloading files, may be empty. Added by a newer backend. */
+  active_files: ActiveFile[];
   eta_seconds: number | null;
   error: string | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+}
+
+/* --- GET /api/export/jobs/{id}/files ------------------------------------ */
+
+export type MediaFileStatus = 'pending' | 'downloading' | 'done' | 'failed' | 'skipped';
+
+/** Row of the `media_files` table (§2.4), as returned by the job files endpoint. */
+export interface MediaFileRow {
+  id: number;
+  message_id: number;
+  tg_message_id: number;
+  kind: string;
+  file_name: string | null;
+  ext: string | null;
+  mime_type: string | null;
+  size: number | null;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  rel_path: string | null;
+  status: string;
+  error: string | null;
+  attempts: number;
+  downloaded_at: string | null;
+}
+
+export interface ListJobFilesParams {
+  status?: 'all' | MediaFileStatus;
+  kind?: string; // 'all' | photo | video | …
+  page?: number;
+  page_size?: number;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warning' | 'error';
@@ -325,6 +371,8 @@ export interface ListJobsParams {
 export interface RebuildJobRequest {
   formats?: ExportFormat[];
   layout?: LayoutStrategy;
+  sort_field?: SortField;
+  sort_order?: SortOrder;
 }
 
 export interface ExportManifest {

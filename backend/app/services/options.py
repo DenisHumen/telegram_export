@@ -77,6 +77,18 @@ class ExportOptions(BaseModel):
     download_thumbs: bool = False
     download_avatars: bool = False
 
+    #: Keep retrying a file until it downloads. With a handful of attempts a
+    #: long export quietly loses files to transient network errors — and a
+    #: partial archive is worse than a slow one. Permanent errors (deleted
+    #: media, revoked access) still stop immediately.
+    retry_forever: bool = True
+    #: Hard ceiling per file even in retry_forever mode, as a runaway guard.
+    max_attempts: int = Field(default=200, ge=1, le=10_000)
+    #: Continue an interrupted file from where it stopped instead of restarting.
+    resume_partial: bool = True
+    #: After the main pass, sweep everything still missing and retry it.
+    final_sweep: bool = True
+
     # --- how to lay out --------------------------------------------------
     layout: LayoutStrategy = "by_type_date"
     sort_field: SortField = "date"

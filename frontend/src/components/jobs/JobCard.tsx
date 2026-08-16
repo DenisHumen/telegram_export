@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   ChevronDown,
+  Copy,
   FileJson,
   FolderOpen,
   Hammer,
+  ListTree,
   Pause,
   Play,
   Square,
@@ -15,15 +17,23 @@ import {
 import { cn } from '../../lib/cn';
 import * as api from '../../api/client';
 import type { ExportJob } from '../../api/types';
-import { JOB_PHASE_LABEL, JOB_STATUS_LABEL, JOB_STATUS_TONE, LOG_LEVEL_CLASS } from '../../lib/labels';
-import { formatBytes, formatDate, formatDuration, formatNumber, formatSpeed, formatTime } from '../../lib/format';
+import { JOB_PHASE_LABEL, JOB_STATUS_LABEL, JOB_STATUS_TONE } from '../../lib/labels';
+import { formatBytes, formatDate, formatDuration, formatNumber, formatSpeed, percent } from '../../lib/format';
+import { activeFilesOf, avgSpeedOf, isJobActive } from '../../lib/jobs';
 import { confirmDialog, toast } from '../../store/ui';
-import { useJobEvents } from '../../hooks/queries';
 import { IconButton } from '../ui/Button';
 import { StatusPill } from '../ui/Badge';
+import { Avatar } from '../ui/Avatar';
+import { LiveValue } from '../ui/LiveValue';
 import { Modal } from '../ui/Modal';
 import { ProgressBar } from '../ui/ProgressBar';
 import { Skeleton } from '../ui/Skeleton';
+import { Tooltip } from '../ui/Tooltip';
+import { ActiveDownloads } from './ActiveDownloads';
+import { JobEvents } from './JobEvents';
+import { JobFiles } from './JobFiles';
+
+/* ------------------------------------------------------------- manifest */
 
 function ManifestModal({ jobId, onClose }: { jobId: number; onClose: () => void }) {
   const { data, isLoading, isError, error } = useQuery({
@@ -33,36 +43,30 @@ function ManifestModal({ jobId, onClose }: { jobId: number; onClose: () => void 
   });
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      size="lg"
-      title={`Манифест задачи #${jobId}`}
-      subtitle="manifest.json из каталога экспорта"
-    >
+    <Modal open onClose={onClose} size="lg" title={`Манифест задачи #${jobId}`} subtitle="manifest.json из каталога экспорта">
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 10 }).map((_, index) => (
-            <Skeleton key={index} className="h-3.5" />
+            <Skeleton key={index} className="h-3" />
           ))}
         </div>
       ) : isError ? (
         <p className="text-[13px] text-danger">{api.errorMessage(error)}</p>
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-3">
             {[
               { label: 'Сообщений', value: formatNumber(data?.stats.messages ?? 0) },
               { label: 'Медиафайлов', value: formatNumber(data?.stats.media_files ?? 0) },
               { label: 'Объём', value: formatBytes(data?.stats.bytes ?? 0) },
             ].map((tile) => (
-              <div key={tile.label} className="panel-inset px-3.5 py-3">
-                <p className="text-[11px] uppercase tracking-wide text-ink-faint">{tile.label}</p>
-                <p className="mt-1 font-mono text-[15px] text-ink">{tile.value}</p>
+              <div key={tile.label} className="bg-surface px-4 py-3">
+                <p className="micro-label">{tile.label}</p>
+                <p className="tnum mt-1 font-mono text-[14px] text-text">{tile.value}</p>
               </div>
             ))}
           </div>
-          <pre className="max-h-[46vh] overflow-auto scroll-thin rounded-xl border border-line bg-base/70 p-4 font-mono text-[11.5px] leading-relaxed text-ink-muted">
+          <pre className="scroll-thin max-h-[46vh] overflow-auto rounded-card border border-border bg-surface-2/50 p-4 font-mono text-[11.5px] leading-relaxed text-dim">
             {JSON.stringify(data, null, 2)}
           </pre>
         </div>
@@ -71,11 +75,56 @@ function ManifestModal({ jobId, onClose }: { jobId: number; onClose: () => void 
   );
 }
 
+/* ---------------------------------------------------------------- parts */
+
+function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+  return (
+    <div className="bg-surface px-5 py-3">
+      <p className="micro-label">{label}</p>
+      <p className="tnum mt-1 font-mono text-[13px] text-text">{value}</p>
+      {hint ? <p className="tnum mt-0.5 font-mono text-[11.5px] text-muted">{hint}</p> : null}
+    </div>
+  );
+}
+
+function Disclosure({
+  icon,
+  label,
+  open,
+  onToggle,
+  right,
+}: {
+  icon: ReactNode;
+  label: string;
+  open: boolean;
+  onToggle: () => void;
+  right?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="flex w-full items-center gap-2 px-5 py-2.5 text-[12.5px] text-dim transition-colors duration-120 hover:bg-veil hover:text-text"
+    >
+      {icon}
+      {label}
+      {right ? <span className="tnum ml-2 font-mono text-[11.5px] text-muted">{right}</span> : null}
+      <ChevronDown
+        className={cn('ml-auto h-4 w-4 transition-transform duration-150', open && 'rotate-180')}
+        aria-hidden
+      />
+    </button>
+  );
+}
+
+/* ----------------------------------------------------------------- card */
+
 export function JobCard({ job, compact }: { job: ExportJob; compact?: boolean }) {
-  const [expanded, setExpanded] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
   const [manifestOpen, setManifestOpen] = useState(false);
   const queryClient = useQueryClient();
-  const { data: events, isLoading: eventsLoading } = useJobEvents(job.id, expanded);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['jobs'] });
@@ -117,48 +166,66 @@ export function JobCard({ job, compact }: { job: ExportJob; compact?: boolean })
     onError: (error) => toast.error('Не удалось открыть папку', api.errorMessage(error)),
   });
 
-  const isActive = job.status === 'running' || job.status === 'queued';
-  const messagesPct = job.total_messages > 0 ? (job.processed_messages / job.total_messages) * 100 : 0;
+  const active = isJobActive(job);
+  const running = job.status === 'running';
+  const activeFiles = activeFilesOf(job);
+  const avgSpeed = avgSpeedOf(job);
+
+  const messagesPct = percent(job.processed_messages, job.total_messages);
+  const filesPct = percent(job.downloaded_files, job.total_files);
+
+  const copyPath = async () => {
+    if (!job.output_dir) return;
+    try {
+      await navigator.clipboard.writeText(job.output_dir);
+      toast.success('Скопировано', 'Путь к каталогу экспорта в буфере обмена');
+    } catch {
+      toast.error('Не удалось скопировать путь');
+    }
+  };
 
   return (
-    <div className={cn('card overflow-hidden', isActive && 'border-accent/25')}>
-      <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Link
-              to={`/chats/${job.chat_id}`}
-              className="truncate text-[15px] font-semibold tracking-tight text-ink transition-colors duration-150 hover:text-accent-soft"
-            >
-              {job.chat_title || `Чат #${job.chat_id}`}
-            </Link>
-            <StatusPill tone={JOB_STATUS_TONE[job.status]} pulse={job.status === 'running'}>
-              {JOB_STATUS_LABEL[job.status]}
-            </StatusPill>
-            <span className="font-mono text-[11.5px] text-ink-faint">#{job.id}</span>
+    <article className={cn('card overflow-hidden', running && 'border-accent/30')}>
+      {/* ---------------------------------------------------------- header */}
+      <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
+        <div className="flex min-w-0 gap-3">
+          <Avatar name={job.chat_title} seed={job.chat_id} size={34} square />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to={`/chats/${job.chat_id}`}
+                className="truncate text-[14px] font-medium text-text transition-colors duration-120 hover:text-accent"
+              >
+                {job.chat_title || `Чат #${job.chat_id}`}
+              </Link>
+              <StatusPill tone={JOB_STATUS_TONE[job.status]} pulse={running}>
+                {JOB_STATUS_LABEL[job.status]}
+              </StatusPill>
+              <span className="tnum font-mono text-[11.5px] text-muted">#{job.id}</span>
+            </div>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-muted">
+              <span>{JOB_PHASE_LABEL[job.phase]}</span>
+              <span>создана {formatDate(job.created_at)}</span>
+              {job.finished_at ? <span>завершена {formatDate(job.finished_at)}</span> : null}
+            </p>
           </div>
-          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-faint">
-            <span>Этап: {JOB_PHASE_LABEL[job.phase]}</span>
-            <span>Создана {formatDate(job.created_at)}</span>
-            {job.finished_at ? <span>Завершена {formatDate(job.finished_at)}</span> : null}
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {job.status === 'running' ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-0.5">
+          {running ? (
             <IconButton label="Пауза" size="sm" onClick={() => action.mutate('pause')}>
               <Pause className="h-4 w-4" />
             </IconButton>
           ) : null}
           {job.status === 'paused' ? (
-            <IconButton label="Продолжить" size="sm" variant="success" onClick={() => action.mutate('resume')}>
+            <IconButton label="Продолжить" size="sm" onClick={() => action.mutate('resume')}>
               <Play className="h-4 w-4" />
             </IconButton>
           ) : null}
-          {isActive || job.status === 'paused' ? (
+          {active || job.status === 'paused' ? (
             <IconButton
-              label="Отменить"
+              label="Отменить экспорт"
               size="sm"
-              variant="danger"
               onClick={async () => {
                 const ok = await confirmDialog({
                   title: 'Отменить экспорт?',
@@ -173,15 +240,15 @@ export function JobCard({ job, compact }: { job: ExportJob; compact?: boolean })
             </IconButton>
           ) : null}
           <IconButton
-            label="Пересобрать отчёты"
+            label="Пересобрать отчёты из базы"
             size="sm"
             onClick={() => action.mutate('rebuild')}
-            disabled={isActive}
+            disabled={active}
           >
             <Hammer className="h-4 w-4" />
           </IconButton>
           <IconButton
-            label="Открыть папку"
+            label="Открыть папку экспорта"
             size="sm"
             disabled={!job.output_dir}
             onClick={() => job.output_dir && openFolderMutation.mutate(job.output_dir)}
@@ -215,95 +282,128 @@ export function JobCard({ job, compact }: { job: ExportJob; compact?: boolean })
         </div>
       </div>
 
-      <div className="grid gap-4 px-5 py-4 lg:grid-cols-2">
+      {/* -------------------------------------------------------- progress */}
+      <div className="grid gap-4 border-t border-border px-5 py-4 lg:grid-cols-2">
         <ProgressBar
           value={job.processed_messages}
           total={job.total_messages}
-          running={job.status === 'running'}
+          running={running}
           label="Сообщения"
           right={`${formatNumber(job.processed_messages)} / ${formatNumber(job.total_messages)} · ${messagesPct.toFixed(0)}%`}
         />
         <ProgressBar
           value={job.downloaded_files}
           total={job.total_files}
-          running={job.status === 'running' && job.phase === 'downloading'}
+          running={running && job.phase === 'downloading'}
           tone={job.failed_files > 0 ? 'warning' : 'accent'}
           label="Файлы"
-          right={`${formatNumber(job.downloaded_files)} / ${formatNumber(job.total_files)}`}
+          right={`${formatNumber(job.downloaded_files)} / ${formatNumber(job.total_files)} · ${filesPct.toFixed(0)}%`}
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-px border-t border-line bg-line/40 sm:grid-cols-4">
-        {[
-          { label: 'Скачано', value: formatBytes(job.bytes_downloaded) },
-          { label: 'Скорость', value: job.status === 'running' ? formatSpeed(job.speed_bps) : '—' },
-          { label: 'Осталось', value: job.eta_seconds !== null ? formatDuration(job.eta_seconds) : '—' },
-          {
-            label: 'Ошибки / пропуски',
-            value: `${formatNumber(job.failed_files)} / ${formatNumber(job.skipped_files)}`,
-          },
-        ].map((tile) => (
-          <div key={tile.label} className="bg-surface px-5 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-ink-faint">{tile.label}</p>
-            <p className="mt-1 font-mono text-[14px] text-ink">{tile.value}</p>
-          </div>
-        ))}
+      {/* ------------------------------------------------------------ stats */}
+      <div className="grid grid-cols-2 gap-px border-t border-border bg-border sm:grid-cols-3 xl:grid-cols-5">
+        <Stat
+          label="Скачано"
+          value={<LiveValue value={formatBytes(job.bytes_downloaded)} />}
+          hint={job.bytes_total > 0 ? `из ${formatBytes(job.bytes_total)}` : undefined}
+        />
+        <Stat label="Скорость" value={<LiveValue value={running ? formatSpeed(job.speed_bps) : '—'} />} />
+        <Stat label="Средняя" value={<LiveValue value={avgSpeed > 0 ? formatSpeed(avgSpeed) : '—'} />} />
+        <Stat
+          label="Осталось"
+          value={<LiveValue value={job.eta_seconds !== null ? formatDuration(job.eta_seconds) : '—'} />}
+        />
+        <Stat
+          label="Файлы"
+          value={
+            <span className="flex items-baseline gap-1">
+              <span className="text-success">{formatNumber(job.downloaded_files)}</span>
+              <span className="text-muted">/</span>
+              <span className={job.failed_files > 0 ? 'text-danger' : 'text-muted'}>
+                {formatNumber(job.failed_files)}
+              </span>
+              <span className="text-muted">/</span>
+              <span className="text-muted">{formatNumber(job.skipped_files)}</span>
+            </span>
+          }
+          hint="готово / ошибки / пропущено"
+        />
       </div>
 
       {job.error ? (
-        <p className="border-t border-danger/20 bg-danger/[0.06] px-5 py-3 font-mono text-[12px] text-danger">
-          {job.error}
-        </p>
+        <p className="border-t border-border px-5 py-2.5 font-mono text-[12px] text-danger">{job.error}</p>
       ) : null}
 
-      {job.output_dir ? (
-        <p className="truncate border-t border-line px-5 py-2.5 font-mono text-[11.5px] text-ink-faint" title={job.output_dir}>
-          {job.output_dir}
-        </p>
+      {/* --------------------------------------------------- live downloads */}
+      {active || job.status === 'paused' || activeFiles.length > 0 ? (
+        <div className="border-t border-border">
+          <p className="micro-label px-5 pb-1 pt-3">Сейчас скачивается</p>
+          <ActiveDownloads files={activeFiles} />
+        </div>
       ) : null}
 
+      {/* ------------------------------------------------------- disclosures */}
       {!compact ? (
         <>
-          <button
-            type="button"
-            onClick={() => setExpanded((value) => !value)}
-            aria-expanded={expanded}
-            className="flex w-full items-center gap-2 border-t border-line px-5 py-3 text-[12.5px] text-ink-muted transition-colors duration-150 hover:bg-white/[0.03] hover:text-ink"
-          >
-            <Terminal className="h-4 w-4" aria-hidden />
-            Журнал событий
-            <ChevronDown
-              className={cn('ml-auto h-4 w-4 transition-transform duration-150', expanded && 'rotate-180')}
-              aria-hidden
+          <div className="border-t border-border">
+            <Disclosure
+              icon={<ListTree className="h-4 w-4" aria-hidden />}
+              label="Файлы задачи"
+              open={filesOpen}
+              onToggle={() => setFilesOpen((value) => !value)}
+              right={job.total_files > 0 ? formatNumber(job.total_files) : undefined}
             />
-          </button>
-          {expanded ? (
-            <div className="max-h-[280px] overflow-y-auto scroll-thin border-t border-line bg-base/60 px-5 py-3">
-              {eventsLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 4 }).map((_, index) => (
-                    <Skeleton key={index} className="h-3.5" />
-                  ))}
-                </div>
-              ) : (events?.length ?? 0) === 0 ? (
-                <p className="py-2 text-[12.5px] text-ink-faint">Событий пока нет</p>
-              ) : (
-                <ol className="space-y-1 font-mono text-[12px] leading-relaxed">
-                  {events?.map((event) => (
-                    <li key={event.id} className="flex gap-3">
-                      <span className="shrink-0 text-ink-faint/70">{formatTime(event.ts)}</span>
-                      <span className={cn('w-16 shrink-0 uppercase', LOG_LEVEL_CLASS[event.level])}>{event.level}</span>
-                      <span className="min-w-0 break-words text-ink-muted">{event.message}</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
-          ) : null}
+            {filesOpen ? (
+              <div className="border-t border-border">
+                <JobFiles jobId={job.id} open={filesOpen} />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="border-t border-border">
+            <Disclosure
+              icon={<Terminal className="h-4 w-4" aria-hidden />}
+              label="Журнал событий"
+              open={eventsOpen}
+              onToggle={() => setEventsOpen((value) => !value)}
+            />
+            {eventsOpen ? (
+              <div className="border-t border-border bg-surface-2/40">
+                <JobEvents jobId={job.id} open={eventsOpen} />
+              </div>
+            ) : null}
+          </div>
         </>
       ) : null}
 
+      {/* ------------------------------------------------------ output path */}
+      {job.output_dir ? (
+        <div className="flex items-center gap-2 border-t border-border px-5 py-2">
+          <Tooltip label="Скопировать путь" className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={copyPath}
+              aria-label="Скопировать путь к каталогу экспорта"
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-control py-1 text-left transition-colors duration-120 hover:text-text"
+            >
+              <Copy className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+              <span className="truncate font-mono text-[11.5px] text-muted" title={job.output_dir}>
+                {job.output_dir}
+              </span>
+            </button>
+          </Tooltip>
+          <IconButton
+            label="Открыть папку экспорта"
+            size="sm"
+            onClick={() => job.output_dir && openFolderMutation.mutate(job.output_dir)}
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+          </IconButton>
+        </div>
+      ) : null}
+
       {manifestOpen ? <ManifestModal jobId={job.id} onClose={() => setManifestOpen(false)} /> : null}
-    </div>
+    </article>
   );
 }

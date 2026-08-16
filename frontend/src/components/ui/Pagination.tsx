@@ -24,14 +24,20 @@ export function Pagination({
   const items = Array.from({ length: Math.min(windowSize, safePages) }, (_, index) => start + index);
 
   return (
-    <div className={cn('flex flex-wrap items-center justify-between gap-3 px-1 py-3', className)}>
-      <p className="text-[12.5px] text-ink-faint">
-        Всего: <span className="font-mono text-ink-muted">{formatNumber(total)}</span> {unitLabel} · страница{' '}
-        <span className="font-mono text-ink-muted">{page}</span> из{' '}
-        <span className="font-mono text-ink-muted">{safePages}</span>
+    <div className={cn('flex flex-wrap items-center justify-between gap-3 py-3', className)}>
+      <p className="text-[12.5px] text-muted">
+        <span className="tnum font-mono text-dim">{formatNumber(total)}</span> {unitLabel} · страница{' '}
+        <span className="tnum font-mono text-dim">{page}</span> из{' '}
+        <span className="tnum font-mono text-dim">{safePages}</span>
       </p>
-      <div className="flex items-center gap-1.5">
-        <IconButton label="Предыдущая страница" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+      <div className="flex items-center gap-1">
+        <IconButton
+          label="Предыдущая страница"
+          size="sm"
+          tooltip={false}
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+        >
           <ChevronLeft className="h-4 w-4" />
         </IconButton>
         {items.map((item) => (
@@ -41,10 +47,8 @@ export function Pagination({
             onClick={() => onPage(item)}
             aria-current={item === page ? 'page' : undefined}
             className={cn(
-              'h-8 min-w-8 rounded-lg px-2 font-mono text-[12.5px] transition-colors duration-150',
-              item === page
-                ? 'bg-accent/20 text-accent-soft border border-accent/30'
-                : 'border border-line text-ink-muted hover:border-line2 hover:text-ink',
+              'tnum h-8 min-w-8 rounded-control px-2 font-mono text-[12.5px] transition-colors duration-120',
+              item === page ? 'bg-accent-soft text-accent' : 'text-dim hover:bg-veil hover:text-text',
             )}
           >
             {item}
@@ -53,6 +57,7 @@ export function Pagination({
         <IconButton
           label="Следующая страница"
           size="sm"
+          tooltip={false}
           disabled={page >= safePages}
           onClick={() => onPage(page + 1)}
         >

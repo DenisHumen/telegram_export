@@ -229,10 +229,59 @@ export const LOG_LEVEL_LABEL: Record<LogLevel, string> = {
 };
 
 export const LOG_LEVEL_CLASS: Record<LogLevel, string> = {
-  debug: 'text-ink-faint',
-  info: 'text-accent-soft',
+  debug: 'text-muted',
+  info: 'text-dim',
   warning: 'text-warning',
   error: 'text-danger',
+};
+
+export const LOG_LEVEL_TONE: Record<LogLevel, Tone> = {
+  debug: 'neutral',
+  info: 'accent',
+  warning: 'warning',
+  error: 'danger',
+};
+
+/** Left border of a timeline row, by level. */
+export const LOG_LEVEL_BORDER: Record<LogLevel, string> = {
+  debug: 'border-l-border-strong',
+  info: 'border-l-accent/45',
+  warning: 'border-l-warning/70',
+  error: 'border-l-danger/80',
+};
+
+/* ------------------------------------------------------- media files */
+
+/** `media_files.kind` — a superset of MediaKind (§2.4). */
+export const FILE_KIND_LABEL: Record<string, string> = {
+  photo: 'Фото',
+  video: 'Видео',
+  video_note: 'Кружочек',
+  voice: 'Голосовое',
+  audio: 'Аудио',
+  document: 'Документ',
+  sticker: 'Стикер',
+  animation: 'GIF',
+  thumb: 'Превью',
+  avatar: 'Аватар',
+};
+
+export const ALL_FILE_KINDS: string[] = Object.keys(FILE_KIND_LABEL);
+
+export const FILE_STATUS_LABEL: Record<string, string> = {
+  pending: 'В очереди',
+  downloading: 'Скачивается',
+  done: 'Скачано',
+  failed: 'Ошибка',
+  skipped: 'Пропущено',
+};
+
+export const FILE_STATUS_TONE: Record<string, Tone> = {
+  pending: 'neutral',
+  downloading: 'accent',
+  done: 'success',
+  failed: 'danger',
+  skipped: 'warning',
 };
 
 export const AUTH_ERROR_HINT: Record<string, string> = {

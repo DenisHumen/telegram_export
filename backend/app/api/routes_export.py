@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import ApiError, CommitRoute, CurrentJob, DbSession
 from app.api.schemas import CreateJobRequest, RebuildRequest
-from app.db.models import Account, Chat, ExportJob, JobEvent
+from app.db.models import Account, Chat, ExportJob, JobEvent, MediaFile
 from app.services import jobs as jobs_service
 
 log = logging.getLogger("tgvault.api.export")
@@ -112,11 +112,86 @@ async def cancel_job(job: CurrentJob, session: DbSession):
 
 @router.delete("/jobs/{job_id}")
 async def delete_job(job: CurrentJob, session: DbSession):
-    if jobs_service.is_running(job.id):
-        raise ApiError(409, "Сначала остановите выполняющуюся задачу.", "JOB_RUNNING")
+    """Delete a job.
+
+    Refuses only while the job is genuinely active. A job the user already
+    cancelled must always be deletable — previously a task that ignored
+    cancellation (hung on a Telegram call) kept the registry entry alive and
+    made the row permanently undeletable, with the UI insisting "сначала
+    остановите задачу" about an already-stopped job.
+    """
+    if job.status in {"queued", "running", "paused"} and jobs_service.is_running(job.id):
+        raise ApiError(
+            409,
+            "Задача ещё выполняется. Остановите её и повторите.",
+            "JOB_RUNNING",
+        )
+    # Terminal status (or a zombie task): make sure nothing is left running.
+    await jobs_service.force_stop(job.id)
     await session.delete(job)
     await session.flush()
     return {"ok": True}
+
+
+@router.get("/jobs/{job_id}/files")
+async def job_files(
+    job: CurrentJob,
+    session: DbSession,
+    status: str = "all",
+    kind: str = "all",
+    search: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+):
+    """Files belonging to a job's chat, with their download status."""
+    query = select(MediaFile).where(MediaFile.chat_id == job.chat_id)
+    if status and status != "all":
+        query = query.where(MediaFile.status == status)
+    if kind and kind != "all":
+        query = query.where(MediaFile.kind == kind)
+    if search:
+        query = query.where(MediaFile.file_name.like(f"%{search.strip()}%"))
+    query = query.order_by(MediaFile.id.desc())
+
+    page = max(1, page)
+    page_size = max(1, min(200, page_size))
+    total = int(
+        await session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    )
+    rows = (
+        await session.execute(query.offset((page - 1) * page_size).limit(page_size))
+    ).scalars().all()
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "message_id": row.message_id,
+                "tg_message_id": row.tg_message_id,
+                "kind": row.kind,
+                "file_name": row.file_name,
+                "ext": row.ext,
+                "mime_type": row.mime_type,
+                "size": row.size,
+                "width": row.width,
+                "height": row.height,
+                "duration": row.duration,
+                "rel_path": row.rel_path,
+                "status": row.status,
+                "error": row.error,
+                "attempts": row.attempts,
+                "downloaded_at": (
+                    row.downloaded_at.isoformat(timespec="milliseconds") + "Z"
+                    if row.downloaded_at
+                    else None
+                ),
+            }
+            for row in rows
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": (total + page_size - 1) // page_size if page_size else 1,
+    }
 
 
 @router.get("/jobs/{job_id}/events")

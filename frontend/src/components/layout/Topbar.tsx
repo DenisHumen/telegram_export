@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, ChevronDown, Plus, Search, Wifi, WifiOff } from 'lucide-react';
+import { Check, ChevronDown, Plus, Search } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { useAccounts, useChats } from '../../hooks/queries';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useWsStatus, wsClient } from '../../hooks/useWebSocket';
-import { useUiStore } from '../../store/ui';
+import { usePageStore, useUiStore } from '../../store/ui';
 import { CHAT_KIND_LABEL } from '../../lib/labels';
-import { Avatar } from '../ui/Avatar';
-import { Badge } from '../ui/Badge';
 import { chatPhotoUrl } from '../../api/client';
+import { Avatar } from '../ui/Avatar';
+import { Tooltip } from '../ui/Tooltip';
+import { ThemeToggle } from './ThemeToggle';
 
 const WS_LABEL: Record<string, string> = {
   open: 'Соединение активно',
@@ -17,21 +18,23 @@ const WS_LABEL: Record<string, string> = {
   closed: 'Нет соединения',
 };
 
+/** Small dot + text, not a button-looking chunk. */
 function WsIndicator() {
   const status = useWsStatus();
   const tone = status === 'open' ? 'bg-success' : status === 'connecting' ? 'bg-warning' : 'bg-danger';
+
   return (
-    <button
-      type="button"
-      onClick={() => wsClient.reconnectNow()}
-      title={`${WS_LABEL[status]} · нажмите, чтобы переподключиться`}
-      aria-label={WS_LABEL[status]}
-      className="flex items-center gap-2 rounded-full border border-line bg-surface2/70 px-3 py-1.5 text-[12px] text-ink-muted transition-colors duration-150 hover:border-line2 hover:text-ink"
-    >
-      <span className={cn('h-2 w-2 rounded-full', tone, status !== 'open' && 'animate-pulse-dot')} />
-      {status === 'open' ? <Wifi className="h-3.5 w-3.5" aria-hidden /> : <WifiOff className="h-3.5 w-3.5" aria-hidden />}
-      <span className="hidden lg:inline">{WS_LABEL[status]}</span>
-    </button>
+    <Tooltip label={`${WS_LABEL[status]} · нажмите, чтобы переподключиться`}>
+      <button
+        type="button"
+        onClick={() => wsClient.reconnectNow()}
+        aria-label={WS_LABEL[status]}
+        className="flex items-center gap-2 rounded-control px-1.5 py-1 text-[12px] text-muted transition-colors duration-120 hover:text-dim"
+      >
+        <span className={cn('h-[7px] w-[7px] rounded-pill', tone, status !== 'open' && 'animate-soft-pulse')} />
+        <span className="hidden xl:inline">{status === 'open' ? 'на связи' : WS_LABEL[status]}</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -75,32 +78,28 @@ function AccountSwitcher() {
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex items-center gap-2.5 rounded-xl border border-line bg-surface2/70 py-1.5 pl-1.5 pr-3 transition-colors duration-150 hover:border-line2"
+        aria-label={active ? `Аккаунт: ${active.label} — сменить` : 'Выбрать аккаунт'}
+        className="flex h-8 items-center gap-2 rounded-control pl-1 pr-1.5 transition-colors duration-120 hover:bg-veil"
       >
         {active ? (
-          <Avatar name={active.label} seed={active.id} size={28} square />
+          <Avatar name={active.label} seed={active.id} size={24} square />
         ) : (
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-dashed border-line2 text-ink-faint">
-            <Plus className="h-3.5 w-3.5" />
+          <span className="flex h-6 w-6 items-center justify-center rounded-control border border-dashed border-border-strong text-muted">
+            <Plus className="h-3 w-3" />
           </span>
         )}
-        <span className="hidden min-w-0 text-left sm:block">
-          <span className="block max-w-[160px] truncate text-[13px] font-medium leading-tight text-ink">
-            {active ? active.label : 'Нет аккаунта'}
-          </span>
-          <span className="block max-w-[160px] truncate text-[11px] leading-tight text-ink-faint">
-            {active?.username ? `@${active.username}` : (active?.phone ?? 'Добавьте аккаунт')}
-          </span>
+        <span className="hidden max-w-[130px] truncate text-[12.5px] text-dim sm:block">
+          {active ? active.label : 'Нет аккаунта'}
         </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
       </button>
 
       {open ? (
         <div
           role="listbox"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 w-[280px] overflow-hidden rounded-2xl border border-line2 bg-surface/95 shadow-lift backdrop-blur-xl animate-scale-in"
+          className="elevated absolute right-0 top-[calc(100%+8px)] z-50 w-[270px] animate-scale-in overflow-hidden"
         >
-          <div className="max-h-[320px] overflow-y-auto scroll-thin p-1.5">
+          <div className="scroll-thin max-h-[320px] overflow-y-auto p-1.5">
             {(accounts ?? []).map((account) => (
               <button
                 key={account.id}
@@ -111,29 +110,29 @@ function AccountSwitcher() {
                   setActiveAccountId(account.id);
                   setOpen(false);
                 }}
-                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors duration-150 hover:bg-white/[0.05]"
+                className="flex w-full items-center gap-2.5 rounded-control px-2 py-1.5 text-left transition-colors duration-120 hover:bg-veil"
               >
-                <Avatar name={account.label} seed={account.id} size={30} square />
+                <Avatar name={account.label} seed={account.id} size={26} square />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] text-ink">{account.label}</span>
-                  <span className="block truncate text-[11px] text-ink-faint">
+                  <span className="block truncate text-[13px] text-text">{account.label}</span>
+                  <span className="block truncate text-[11.5px] text-muted">
                     {account.username ? `@${account.username}` : (account.phone ?? '—')}
                   </span>
                 </span>
-                {account.connected ? <span className="h-2 w-2 rounded-full bg-success" /> : null}
-                {account.id === activeAccountId ? <Check className="h-4 w-4 text-accent-soft" aria-hidden /> : null}
+                {account.connected ? <span className="h-1.5 w-1.5 rounded-pill bg-success" /> : null}
+                {account.id === activeAccountId ? <Check className="h-4 w-4 text-accent" aria-hidden /> : null}
               </button>
             ))}
             {(accounts ?? []).length === 0 ? (
-              <p className="px-3 py-4 text-center text-[12.5px] text-ink-faint">Аккаунтов пока нет</p>
+              <p className="px-3 py-4 text-center text-[12.5px] text-muted">Аккаунтов пока нет</p>
             ) : null}
           </div>
           <Link
             to="/accounts/new"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 border-t border-line px-3.5 py-3 text-[13px] text-accent-soft transition-colors duration-150 hover:bg-accent/10"
+            className="flex items-center gap-2 border-t border-border px-3 py-2.5 text-[12.5px] text-dim transition-colors duration-120 hover:bg-veil hover:text-text"
           >
-            <Plus className="h-4 w-4" aria-hidden />
+            <Plus className="h-3.5 w-3.5" aria-hidden />
             Добавить аккаунт
           </Link>
         </div>
@@ -181,8 +180,8 @@ function GlobalSearch() {
   const results = data?.items ?? [];
 
   return (
-    <div className="relative min-w-0 flex-1 max-w-[520px]" ref={boxRef}>
-      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden />
+    <div className="relative hidden md:block md:w-[190px] lg:w-[240px]" ref={boxRef}>
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" aria-hidden />
       <input
         ref={inputRef}
         value={value}
@@ -191,24 +190,22 @@ function GlobalSearch() {
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        placeholder="Поиск по чатам…"
+        placeholder="Поиск чатов"
         aria-label="Глобальный поиск по чатам"
-        className="field h-10 pl-10 pr-16"
+        className="field h-8 border-transparent bg-surface-2 pl-8 pr-12 text-[12.5px]"
       />
-      <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-faint md:block">
-        Ctrl K
+      <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 font-mono text-[10px] text-muted lg:block">
+        ⌘K
       </kbd>
 
       {open && debounced.trim().length >= 2 ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-line2 bg-surface/95 shadow-lift backdrop-blur-xl animate-scale-in">
+        <div className="elevated absolute left-0 right-0 top-[calc(100%+8px)] z-50 animate-scale-in overflow-hidden md:min-w-[320px]">
           {activeAccountId === null ? (
-            <p className="px-4 py-4 text-[12.5px] text-ink-faint">Сначала выберите аккаунт</p>
+            <p className="px-4 py-4 text-[12.5px] text-muted">Сначала выберите аккаунт</p>
           ) : results.length === 0 ? (
-            <p className="px-4 py-4 text-[12.5px] text-ink-faint">
-              {isFetching ? 'Ищем…' : 'Ничего не найдено'}
-            </p>
+            <p className="px-4 py-4 text-[12.5px] text-muted">{isFetching ? 'Ищем…' : 'Ничего не найдено'}</p>
           ) : (
-            <div className="max-h-[360px] overflow-y-auto scroll-thin p-1.5">
+            <div className="scroll-thin max-h-[360px] overflow-y-auto p-1.5">
               {results.map((chat) => (
                 <button
                   key={chat.id}
@@ -218,21 +215,20 @@ function GlobalSearch() {
                     setValue('');
                     navigate(`/chats/${chat.id}`);
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors duration-150 hover:bg-white/[0.05]"
+                  className="flex w-full items-center gap-2.5 rounded-control px-2 py-1.5 text-left transition-colors duration-120 hover:bg-veil"
                 >
                   <Avatar
                     name={chat.title}
                     seed={chat.id}
                     src={chat.photo_path ? chatPhotoUrl(chat.photo_path) : null}
-                    size={30}
+                    size={26}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] text-ink">{chat.title}</span>
-                    <span className="block truncate text-[11px] text-ink-faint">
+                    <span className="block truncate text-[13px] text-text">{chat.title}</span>
+                    <span className="block truncate text-[11.5px] text-muted">
                       {chat.username ? `@${chat.username}` : CHAT_KIND_LABEL[chat.kind]}
                     </span>
                   </span>
-                  <Badge tone="neutral">{CHAT_KIND_LABEL[chat.kind]}</Badge>
                 </button>
               ))}
             </div>
@@ -244,12 +240,32 @@ function GlobalSearch() {
 }
 
 export function Topbar() {
+  const title = usePageStore((state) => state.title);
+  const subtitle = usePageStore((state) => state.subtitle);
+  const setActionsSlot = usePageStore((state) => state.setActionsSlot);
+
+  const slotRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setActionsSlot(node);
+    },
+    [setActionsSlot],
+  );
+
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-base/80 backdrop-blur-xl">
-      <div className="flex h-16 items-center gap-3 px-5 lg:gap-5 lg:px-7">
-        <GlobalSearch />
-        <div className="ml-auto flex items-center gap-2.5">
+    <header className="sticky top-0 z-30 border-b border-border bg-bg/85 backdrop-blur-md">
+      <div className="mx-auto flex h-topbar w-full max-w-content items-center gap-3 px-6 lg:px-8">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-[15px] font-semibold leading-tight tracking-[-0.01em] text-text">{title}</h1>
+          {subtitle ? <p className="truncate text-[12px] leading-tight text-muted">{subtitle}</p> : null}
+        </div>
+
+        <div ref={slotRef} className="flex shrink-0 items-center gap-2" />
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <GlobalSearch />
+          <ThemeToggle />
           <WsIndicator />
+          <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
           <AccountSwitcher />
         </div>
       </div>

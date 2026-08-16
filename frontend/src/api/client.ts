@@ -16,12 +16,14 @@ import type {
   Health,
   JobEvent,
   ListChatsParams,
+  ListJobFilesParams,
   ListJobsParams,
   ListLogsParams,
   ListMessagesParams,
   LogFile,
   LogFileTail,
   LogRow,
+  MediaFileRow,
   MessageRow,
   OkResponse,
   Paginated,
@@ -203,6 +205,10 @@ export const rebuildJob = (id: number, body: RebuildJobRequest = {}) =>
   request<ExportJob>(`/api/export/jobs/${id}/rebuild`, { method: 'POST', body });
 
 export const getJobManifest = (id: number) => request<ExportManifest>(`/api/export/jobs/${id}/manifest`);
+
+/** Per-job media browser (§4.4 addendum). Older backends answer 404 — callers show an inline notice. */
+export const listJobFiles = (id: number, params: ListJobFilesParams = {}) =>
+  request<Paginated<MediaFileRow>>(`/api/export/jobs/${id}/files${buildQuery({ ...params })}`);
 
 /* ------------------------------------------------------------------ 4.5 */
 

@@ -13,52 +13,78 @@ export function Card({
   return <div className={cn('card', hover && 'card-hover', className)}>{children}</div>;
 }
 
+/** Header row inside a card — hairline separated, no icon chrome by default. */
 export function CardHeader({
   title,
   subtitle,
-  icon,
   action,
   className,
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
-  icon?: ReactNode;
   action?: ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn('flex items-start justify-between gap-4 border-b border-line px-5 py-4', className)}>
-      <div className="flex items-start gap-3 min-w-0">
-        {icon ? (
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line bg-surface2 text-accent-soft">
-            {icon}
-          </div>
-        ) : null}
-        <div className="min-w-0">
-          <h2 className="truncate text-[15px] font-semibold tracking-tight text-ink">{title}</h2>
-          {subtitle ? <p className="mt-0.5 truncate text-[13px] text-ink-muted">{subtitle}</p> : null}
-        </div>
+    <div className={cn('flex items-start justify-between gap-4 border-b border-border px-5 py-3.5', className)}>
+      <div className="min-w-0">
+        <h2 className="truncate text-[14px] font-medium text-text">{title}</h2>
+        {subtitle ? <p className="mt-0.5 truncate text-[12.5px] text-muted">{subtitle}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
 
-export function SectionTitle({
+/**
+ * A flat page section: 13px dim header, optional action, hairline above.
+ * Replaces card-in-card nesting.
+ */
+export function Section({
   title,
-  subtitle,
+  description,
   action,
+  children,
+  className,
+  divided = true,
 }: {
-  title: ReactNode;
-  subtitle?: ReactNode;
+  title?: ReactNode;
+  description?: ReactNode;
   action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  /** Draw the hairline above the section. */
+  divided?: boolean;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink">{title}</h1>
-        {subtitle ? <p className="mt-1 text-[13px] text-ink-muted">{subtitle}</p> : null}
-      </div>
+    <section className={cn(divided && 'border-t border-border pt-6', className)}>
+      {title ? (
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-[13px] font-medium text-dim">{title}</h2>
+            {description ? <p className="mt-0.5 text-[12.5px] text-muted">{description}</p> : null}
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
+        </div>
+      ) : null}
+      {children}
+    </section>
+  );
+}
+
+/** Standalone 13px section header for places that build their own layout. */
+export function SectionHeading({
+  title,
+  action,
+  className,
+}: {
+  title: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex flex-wrap items-baseline justify-between gap-3', className)}>
+      <h2 className="text-[13px] font-medium text-dim">{title}</h2>
       {action}
     </div>
   );

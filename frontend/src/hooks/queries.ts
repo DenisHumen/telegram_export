@@ -10,12 +10,14 @@ import type {
   Health,
   JobEvent,
   ListChatsParams,
+  ListJobFilesParams,
   ListJobsParams,
   ListLogsParams,
   ListMessagesParams,
   LogFile,
   LogFileTail,
   LogRow,
+  MediaFileRow,
   MessageRow,
   Paginated,
 } from '../api/types';
@@ -33,6 +35,7 @@ export const qk = {
   jobs: (params: ListJobsParams) => ['jobs', params] as const,
   job: (id: number) => ['job', id] as const,
   jobEvents: (id: number) => ['job-events', id] as const,
+  jobFiles: (id: number, params: ListJobFilesParams) => ['job-files', id, params] as const,
   logs: (params: ListLogsParams) => ['logs', params] as const,
   logFiles: ['log-files'] as const,
   logFile: (name: string, tail: number) => ['log-file', name, tail] as const,
@@ -128,6 +131,21 @@ export function useJobEvents(jobId: number | null, enabled: boolean): UseQueryRe
     queryKey: qk.jobEvents(jobId ?? 0),
     queryFn: () => api.getJobEvents(jobId as number, { limit: 300 }),
     enabled: jobId !== null && enabled,
+  });
+}
+
+/** Per-job media browser. `enabled` keeps it idle until the section is opened. */
+export function useJobFiles(
+  jobId: number | null,
+  params: ListJobFilesParams,
+  enabled: boolean,
+): UseQueryResult<Paginated<MediaFileRow>> {
+  return useQuery({
+    queryKey: qk.jobFiles(jobId ?? 0, params),
+    queryFn: () => api.listJobFiles(jobId as number, params),
+    enabled: jobId !== null && enabled,
+    placeholderData: (previous) => previous,
+    retry: false,
   });
 }
 

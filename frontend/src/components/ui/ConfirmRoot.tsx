@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
+import { cn } from '../../lib/cn';
 import { useConfirmStore } from '../../store/ui';
 import { Button } from './Button';
 import { Modal } from './Modal';
@@ -26,15 +27,11 @@ export function ConfirmRoot() {
       }
     >
       <div className="flex gap-3">
-        <div
-          className={
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ' +
-            (request?.danger ? 'border-danger/30 bg-danger/10 text-danger' : 'border-line bg-surface2 text-accent-soft')
-          }
-        >
-          <AlertTriangle className="h-5 w-5" aria-hidden />
-        </div>
-        <p className="text-[14px] leading-relaxed text-ink-muted">
+        <AlertTriangle
+          className={cn('mt-0.5 h-5 w-5 shrink-0', request?.danger ? 'text-danger' : 'text-warning')}
+          aria-hidden
+        />
+        <p className="text-[13.5px] leading-relaxed text-dim">
           {request?.description ?? 'Действие нельзя отменить.'}
         </p>
       </div>

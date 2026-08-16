@@ -157,13 +157,27 @@ else
 fi
 
 # --- docker -----------------------------------------------------------------
+# Демон может быть запущен, но недоступен пользователю вне группы docker —
+# тогда пробуем sudo, если он настроен без пароля (status.sh не должен
+# останавливаться на приглашении ввести пароль).
+DOCKER_BIN="docker"
+if ! have docker; then
+  DOCKER_BIN=""
+elif ! docker info >/dev/null 2>&1; then
+  if have sudo && sudo -n docker info >/dev/null 2>&1; then
+    DOCKER_BIN="sudo docker"
+  else
+    DOCKER_BIN=""
+  fi
+fi
+
 container_row() {
   _label="$1"; _name="$2"; _detail="$3"
-  if ! have docker || ! docker info >/dev/null 2>&1; then
-    row "$_label" "docker недоступен" "$DOWN"
+  if [ -z "$DOCKER_BIN" ]; then
+    row "$_label" "docker недоступен (нет прав? см. ./start.sh --sudo-docker)" "$DOWN"
     return
   fi
-  _st="$(MSYS_NO_PATHCONV=1 docker inspect \
+  _st="$(MSYS_NO_PATHCONV=1 $DOCKER_BIN inspect \
       --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}' \
       "$_name" 2>/dev/null | tr -d '\r')"
   if [ -z "$_st" ]; then
